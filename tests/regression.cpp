@@ -121,11 +121,11 @@ int main() {
               "dragging track right reaches actual full background opacity");
         DestroyWindow(slider);
         g_pointerWindow = originalBounds;
-        ResizeWindowFromPointerDelta(25, 15);
+        ResizeWindowFromPointerDelta(-25, -15);
         RECT resized{};
         GetWindowRect(g_window, &resized);
-        Check(resized.right - resized.left == originalBounds.right - originalBounds.left + 25 &&
-                  resized.bottom - resized.top == originalBounds.bottom - originalBounds.top + 15,
+        Check(resized.right - resized.left == originalBounds.right - originalBounds.left - 25 &&
+                  resized.bottom - resized.top == originalBounds.bottom - originalBounds.top - 15,
               "bottom-right grip resizes both dimensions");
         g_pointerWindow = resized;
         MoveWindowFromPointerDelta(30, 20);
@@ -134,6 +134,8 @@ int main() {
         Check(moved.left == resized.left + 30 && moved.top == resized.top + 20 &&
                   moved.right - moved.left == resized.right - resized.left,
               "pill drag moves without resizing");
+        SetWindowPos(g_window, nullptr, 0, 0, originalBounds.right - originalBounds.left,
+                     originalBounds.bottom - originalBounds.top, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
         SetWindowTextW(g_edit, L"Hello\r\n\r\n世界");
         const LRESULT glyph = SendMessageW(g_edit, EM_POSFROMCHAR, 0, 0);
         const POINT glyphPoint{GET_X_LPARAM(glyph) + 2, GET_Y_LPARAM(glyph) + 3};
