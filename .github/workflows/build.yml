@@ -26,7 +26,7 @@ jobs:
             runner: windows-11-vs2026-arm
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Build application
         shell: pwsh
         run: .\build.ps1 -Architecture '${{ matrix.arch }}' -OutputDirectory 'out\${{ matrix.arch }}'
@@ -36,7 +36,7 @@ jobs:
       - name: Package portable archive
         shell: pwsh
         run: .\scripts\package.ps1 -Architecture '${{ matrix.arch }}' -BinaryPath 'out\${{ matrix.arch }}\FloatNote.exe' -OutputDirectory artifacts
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: FloatNote-windows-${{ matrix.arch }}
           path: artifacts/*.zip
@@ -50,8 +50,8 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v5
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           pattern: FloatNote-windows-*
           path: release
