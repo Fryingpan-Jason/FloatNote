@@ -1458,16 +1458,16 @@ void TogglePillMenu() {
 
 void ResizeWindowFromPointerDelta(int dx, int dy) {
     MONITORINFO monitor{sizeof(monitor)};
-    GetMonitorInfoW(MonitorFromWindow(g_window, MONITOR_DEFAULTTONEAREST), &monitor);
-    const int maxWidth =
-        std::max(ScaleForDpi(g_window, 180), static_cast<int>(monitor.rcWork.right - monitor.rcWork.left));
-    const int maxHeight =
-        std::max(ScaleForDpi(g_window, 90), static_cast<int>(monitor.rcWork.bottom - monitor.rcWork.top));
-    SetWindowPos(g_window, nullptr, 0, 0,
-                 std::clamp(static_cast<int>(g_pointerWindow.right - g_pointerWindow.left) + dx,
-                            ScaleForDpi(g_window, 180), maxWidth),
-                 std::clamp(static_cast<int>(g_pointerWindow.bottom - g_pointerWindow.top) + dy,
-                            ScaleForDpi(g_window, 90), maxHeight),
+    const int currentWidth = static_cast<int>(g_pointerWindow.right - g_pointerWindow.left);
+    const int currentHeight = static_cast<int>(g_pointerWindow.bottom - g_pointerWindow.top);
+    int maxWidth = std::max(ScaleForDpi(g_window, 180), currentWidth + std::max(0, dx));
+    int maxHeight = std::max(ScaleForDpi(g_window, 90), currentHeight + std::max(0, dy));
+    if (GetMonitorInfoW(MonitorFromWindow(g_window, MONITOR_DEFAULTTONEAREST), &monitor)) {
+        maxWidth = std::max(ScaleForDpi(g_window, 180), static_cast<int>(monitor.rcWork.right - monitor.rcWork.left));
+        maxHeight = std::max(ScaleForDpi(g_window, 90), static_cast<int>(monitor.rcWork.bottom - monitor.rcWork.top));
+    }
+    SetWindowPos(g_window, nullptr, 0, 0, std::clamp(currentWidth + dx, ScaleForDpi(g_window, 180), maxWidth),
+                 std::clamp(currentHeight + dy, ScaleForDpi(g_window, 90), maxHeight),
                  SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
 }
 
