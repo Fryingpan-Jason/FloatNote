@@ -1,0 +1,21 @@
+# Local builds and private portable data
+/build/
+/backups/
+/data/
+/dist/
+/artifacts/
+
+# Visual Studio / MSVC outputs
+.vs/
+*.obj
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.exe
+
+# Temporary files
+*.tmp
+*.log
+Thumbs.db
+Desktop.ini

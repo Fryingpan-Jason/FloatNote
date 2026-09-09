@@ -1,0 +1,35 @@
+#include <windows.h>
+#include "version.h"
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION FLOATNOTE_VERSION_TUPLE
+ PRODUCTVERSION FLOATNOTE_VERSION_TUPLE
+ FILEFLAGSMASK 0x3fL
+#ifdef _DEBUG
+ FILEFLAGS 0x1L
+#else
+ FILEFLAGS 0x0L
+#endif
+ FILEOS 0x40004L
+ FILETYPE 0x1L
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName", "FloatNote contributors\0"
+            VALUE "FileDescription", "FloatNote - lightweight desktop memo\0"
+            VALUE "FileVersion", FLOATNOTE_FILE_VERSION_STRING
+            VALUE "InternalName", "FloatNote\0"
+            VALUE "LegalCopyright", "Copyright (c) 2026 FloatNote contributors\0"
+            VALUE "OriginalFilename", "FloatNote.exe\0"
+            VALUE "ProductName", "FloatNote\0"
+            VALUE "ProductVersion", FLOATNOTE_FILE_VERSION_STRING
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 1200
+    END
+END

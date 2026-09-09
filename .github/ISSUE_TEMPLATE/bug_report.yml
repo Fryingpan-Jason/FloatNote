@@ -1,0 +1,45 @@
+name: Bug report
+description: Report a reproducible FloatNote problem
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Include the expected behavior and exact steps to reproduce it.
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version and build
+      placeholder: Windows 11 24H2, build 26100
+    validations:
+      required: true
+  - type: dropdown
+    id: architecture
+    attributes:
+      label: Architecture
+      options: [x64, x86, ARM64, Unknown]
+    validations:
+      required: true
+  - type: input
+    id: scale
+    attributes:
+      label: Display scale and monitor setup
+      placeholder: 150%, two monitors
+  - type: checkboxes
+    id: mode
+    attributes:
+      label: Relevant modes
+      options:
+        - label: Glass was enabled
+        - label: Windows transparency effects were enabled
+        - label: Mouse click-through was enabled
+        - label: High Contrast, Energy Saver, or Remote Desktop was active
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Screenshots or other evidence
+      description: Remove private note contents before attaching screenshots.
