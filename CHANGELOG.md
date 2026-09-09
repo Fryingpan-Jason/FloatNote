@@ -2,6 +2,21 @@
 
 All notable changes are documented here. FloatNote follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Optional window shadow while retaining rounded glass.
+- Custom text colors with a setting to return to automatic theme-based text color.
+
+### Changed
+
+- Glass and standard mode share adjustable 0–100% background opacity without fading text.
+
+### Fixed
+
+- Remove light fringes around text over dark backgrounds using independent grayscale coverage masks, preserving native selection colors.
+
 ## [1.0.0] - 2026-09-09
 
 ### Added

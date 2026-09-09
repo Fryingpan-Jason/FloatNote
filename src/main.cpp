@@ -53,6 +53,9 @@ constexpr int kMenuLanguage = 208;
 constexpr int kMenuLanguageAutomatic = 209;
 constexpr int kMenuLanguageChinese = 210;
 constexpr int kMenuLanguageEnglish = 211;
+constexpr int kMenuTextColor = 212;
+constexpr int kMenuAutoTextColor = 213;
+constexpr int kMenuShadow = 214;
 constexpr int kMenuThemeBase = 500;
 constexpr int kMenuOpacityBase = 300;
 
@@ -67,6 +70,9 @@ struct Settings {
     bool topmost = false;
     bool passThrough = false;
     COLORREF themeColor = RGB(248, 247, 243);
+    bool autoTextColor = true;
+    COLORREF textColor = RGB(30, 32, 36);
+    bool shadow = true;
     UiLanguage language = UiLanguage::Automatic;
 };
 
@@ -88,6 +94,9 @@ HWND g_menuGlass = nullptr;
 HWND g_menuPassThrough = nullptr;
 HWND g_menuTheme = nullptr;
 HWND g_menuLanguage = nullptr;
+HWND g_menuTextColor = nullptr;
+HWND g_menuAutoTextColor = nullptr;
+HWND g_menuShadow = nullptr;
 HWND g_tooltip = nullptr;
 int g_menuScroll = 0;
 int g_menuWheel = 0;
@@ -102,6 +111,8 @@ int g_scrollRemainder = 0;
 ULONGLONG g_menuDismissedAt = 0;
 COLORREF kBackground = RGB(248, 247, 243);
 COLORREF kText = RGB(30, 32, 36);
+COLORREF kNoteText = RGB(30, 32, 36);
+int g_textMask = 0;
 constexpr int kCornerRadius = 14;
 const COLORREF kThemeColors[] = {RGB(248, 247, 243), RGB(220, 233, 219), RGB(221, 233, 245), RGB(243, 222, 227),
                                  RGB(38, 42, 48)};
@@ -195,13 +206,13 @@ const LocalizedStrings& Text() {
     return StringsFor(g_settings.language);
 }
 int MenuLogicalHeight() {
-    return g_glassActive ? 418 : 476;
+    return 584;
 }
 int MenuLogicalWidth() {
     return ResolveUiLanguage(g_settings.language) == UiLanguage::English ? 360 : 280;
 }
 int EffectiveOpacityPercent() {
-    return g_glassActive ? 0 : g_settings.opacityPercent;
+    return g_settings.opacityPercent;
 }
 int NoteCornerRadius() {
     return g_nativeGlass ? 8 : kCornerRadius;
@@ -252,6 +263,9 @@ void LoadSettings() {
     g_settings.passThrough = ReadIniBool(L"passThrough", false);
     g_settings.themeColor =
         static_cast<COLORREF>(std::clamp(ReadIniInt(L"themeColor", RGB(248, 247, 243)), 0, 0xffffff));
+    g_settings.autoTextColor = ReadIniBool(L"autoTextColor", true);
+    g_settings.textColor = static_cast<COLORREF>(std::clamp(ReadIniInt(L"textColor", RGB(30, 32, 36)), 0, 0xffffff));
+    g_settings.shadow = ReadIniBool(L"shadow", true);
     g_settings.language = static_cast<UiLanguage>(std::clamp(ReadIniInt(L"language", 0), 0, 2));
 }
 
@@ -277,6 +291,9 @@ void SaveSettings() {
     add("fontSize", g_settings.fontSize);
     add("passThrough", g_settings.passThrough);
     add("themeColor", g_settings.themeColor);
+    add("autoTextColor", g_settings.autoTextColor);
+    add("textColor", g_settings.textColor);
+    add("shadow", g_settings.shadow);
     add("language", static_cast<int>(g_settings.language));
     add("layoutVersion", 2);
     add("visualVersion", 4);
@@ -409,7 +426,8 @@ void RecreateFonts(HWND window) {
                     CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei UI");
     SendMessageW(g_edit, WM_SETFONT, reinterpret_cast<WPARAM>(g_textFont), TRUE);
     for (HWND control : {g_pill, g_grip, g_menuTopmost, g_menuAutostart, g_menuHide, g_menuExit, g_menuGlass,
-                         g_menuPassThrough, g_menuTheme, g_menuLanguage})
+                         g_menuPassThrough, g_menuTheme, g_menuLanguage, g_menuTextColor, g_menuAutoTextColor,
+                         g_menuShadow})
         if (control)
             SendMessageW(control, WM_SETFONT, reinterpret_cast<WPARAM>(g_uiFont), TRUE);
     if (oldText)
@@ -420,12 +438,18 @@ void RecreateFonts(HWND window) {
 }
 
 void RoundWindow(HWND window, int radius) {
-    if (window == g_window && g_nativeGlass) {
+    if (window == g_window) {
+        // DWM's forced rounding also requests its shadow. Opt out and retain
+        // our own rounded region when the user disables the shadow.
+        const int corners = g_settings.shadow ? 2 : 1;
+        DwmSetWindowAttribute(window, static_cast<DWMWINDOWATTRIBUTE>(33), &corners, sizeof(corners));
+    }
+    if (window == g_window && g_nativeGlass && g_settings.shadow) {
         SetWindowRgn(window, nullptr, TRUE);
-        const int rounded = 2;
-        DwmSetWindowAttribute(window, static_cast<DWMWINDOWATTRIBUTE>(33), &rounded, sizeof(rounded));
         return;
     }
+    if (window == g_window && g_nativeGlass)
+        radius = NoteCornerRadius();
     RECT rect{};
     GetWindowRect(window, &rect);
     HRGN region = CreateRoundRectRgn(0, 0, rect.right - rect.left + 1, rect.bottom - rect.top + 1,
@@ -466,6 +490,7 @@ void RefreshTheme() {
     g_highContrast = SystemHighContrast();
     kBackground = g_highContrast ? GetSysColor(COLOR_WINDOW) : g_settings.themeColor;
     kText = g_highContrast ? GetSysColor(COLOR_WINDOWTEXT) : ContrastText(kBackground);
+    kNoteText = g_highContrast || g_settings.autoTextColor ? kText : g_settings.textColor;
     HBRUSH oldBrush = g_editBrush;
     g_editBrush = CreateSolidBrush(kBackground);
     if (oldBrush)
@@ -501,7 +526,7 @@ void ApplyVisuals(HWND window) {
     }
     if (wasGlassActive && !g_glassActive)
         g_backdrop.Enable(window, false);
-    const int rounded = 2;
+    const int rounded = g_settings.shadow ? 2 : 1;
     if (g_glassActive &&
         FAILED(DwmSetWindowAttribute(window, static_cast<DWMWINDOWATTRIBUTE>(33), &rounded, sizeof(rounded)))) {
         g_backdrop.Enable(window, false);
@@ -524,13 +549,21 @@ void ApplyVisuals(HWND window) {
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
         ShowWindow(g_canvas, g_nativeGlass ? SW_SHOWNOACTIVATE : SW_HIDE);
     }
-    const int policy = g_nativeGlass ? DWMNCRP_ENABLED : DWMNCRP_DISABLED;
+    const int policy = g_nativeGlass && g_settings.shadow ? DWMNCRP_ENABLED : DWMNCRP_DISABLED;
     const COLORREF noBorder = 0xfffffffe;
     DwmSetWindowAttribute(window, DWMWA_NCRENDERING_POLICY, &policy, sizeof(policy));
     DwmSetWindowAttribute(window, static_cast<DWMWINDOWATTRIBUTE>(34), &noBorder, sizeof(noBorder));
     const BOOL dark = Luminance(kBackground) < 0.18;
     DwmSetWindowAttribute(window, static_cast<DWMWINDOWATTRIBUTE>(20), &dark, sizeof(dark));
-    MARGINS margins{g_nativeGlass ? -1 : 0, 0, 0, 0};
+    const auto frameStyle = GetWindowLongPtrW(window, GWL_STYLE);
+    const auto desiredStyle =
+        g_nativeGlass && g_settings.shadow ? frameStyle | WS_THICKFRAME : frameStyle & ~WS_THICKFRAME;
+    if (frameStyle != desiredStyle) {
+        SetWindowLongPtrW(window, GWL_STYLE, desiredStyle);
+        SetWindowPos(window, nullptr, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    }
+    MARGINS margins{g_nativeGlass && g_settings.shadow ? -1 : 0, 0, 0, 0};
     DwmExtendFrameIntoClientArea(window, &margins);
     RoundWindow(window, kCornerRadius);
     RedrawWindow(window, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
@@ -637,8 +670,6 @@ void SetTopmost(bool enabled) {
 }
 
 void SetOpacityPercent(int opacity, bool persist = true) {
-    if (g_settings.glass && g_glassActive)
-        return;
     g_settings.opacityPercent = std::clamp(opacity, 0, 100);
     ApplyVisuals(g_window);
     if (persist)
@@ -791,7 +822,7 @@ void ShowTrayMenu(POINT position) {
     AppendMenuW(menu, MF_STRING, kMenuToggleVisible, visibilityLabel.c_str());
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
 
-    if (!g_glassActive) {
+    {
         HMENU opacityMenu = CreatePopupMenu();
         const int opacityOptions[] = {100, 90, 80, 70, 60, 50, 40, 30, 20, 10, 0};
         for (int opacity : opacityOptions) {
@@ -803,6 +834,9 @@ void ShowTrayMenu(POINT position) {
     }
     AppendMenuW(menu, MF_STRING | (g_settings.glass ? MF_CHECKED : 0), kMenuGlass, Text().glass);
     AppendMenuW(menu, MF_STRING, kMenuTheme, Text().customTheme);
+    AppendMenuW(menu, MF_STRING, kMenuTextColor, Text().textColor);
+    AppendMenuW(menu, MF_STRING | (g_settings.autoTextColor ? MF_CHECKED : 0), kMenuAutoTextColor, Text().autoTextColor);
+    AppendMenuW(menu, MF_STRING | (g_settings.shadow ? MF_CHECKED : 0), kMenuShadow, Text().shadow);
     HMENU languageMenu = CreatePopupMenu();
     AppendMenuW(languageMenu, MF_STRING | (g_settings.language == UiLanguage::Automatic ? MF_CHECKED : 0),
                 kMenuLanguageAutomatic, Text().languageAutomatic);
@@ -848,16 +882,35 @@ void HandleMenuCommand(int command) {
     case kMenuPassThrough:
         SetPassThrough(!g_settings.passThrough);
         break;
+    case kMenuAutoTextColor:
+        g_settings.autoTextColor = !g_settings.autoTextColor;
+        if (!g_settings.autoTextColor)
+            g_settings.textColor = kNoteText;
+        RefreshTheme();
+        SaveSettings();
+        UpdateMenuLabels();
+        break;
+    case kMenuShadow:
+        g_settings.shadow = !g_settings.shadow;
+        ApplyVisuals(g_window);
+        SaveSettings();
+        UpdateMenuLabels();
+        break;
+    case kMenuTextColor:
     case kMenuTheme: {
         CloseMenu();
         static COLORREF custom[16]{};
         CHOOSECOLORW choose{sizeof(choose)};
         choose.hwndOwner = g_window;
-        choose.rgbResult = g_settings.themeColor;
+        choose.rgbResult = command == kMenuTextColor ? kNoteText : g_settings.themeColor;
         choose.lpCustColors = custom;
         choose.Flags = CC_FULLOPEN | CC_RGBINIT;
         if (ChooseColorW(&choose)) {
-            g_settings.themeColor = choose.rgbResult;
+            if (command == kMenuTextColor) {
+                g_settings.textColor = choose.rgbResult;
+                g_settings.autoTextColor = false;
+            } else
+                g_settings.themeColor = choose.rgbResult;
             RefreshTheme();
             ApplyVisuals(g_window);
             SaveSettings();
@@ -1103,6 +1156,13 @@ void UpdateMenuLabels() {
     swprintf_s(theme, L"%s    #%02X%02X%02X", Text().customTheme, GetRValue(g_settings.themeColor),
                GetGValue(g_settings.themeColor), GetBValue(g_settings.themeColor));
     SetWindowTextW(g_menuTheme, theme);
+    swprintf_s(theme, L"%s    #%02X%02X%02X", Text().textColor, GetRValue(kNoteText), GetGValue(kNoteText),
+               GetBValue(kNoteText));
+    SetWindowTextW(g_menuTextColor, theme);
+    const auto autoText = stateLabel(Text().autoTextColor, g_settings.autoTextColor ? Text().stateOn : Text().stateOff);
+    SetWindowTextW(g_menuAutoTextColor, autoText.c_str());
+    const auto shadow = stateLabel(Text().shadow, g_settings.shadow ? Text().stateOn : Text().stateOff);
+    SetWindowTextW(g_menuShadow, shadow.c_str());
     const wchar_t* languageValue = g_settings.language == UiLanguage::Automatic ? Text().languageAutomatic
                                    : g_settings.language == UiLanguage::Chinese ? Text().languageChinese
                                                                                 : Text().languageEnglish;
@@ -1192,15 +1252,16 @@ void LayoutMenuForMode() {
         return;
     g_menuLayoutMode = static_cast<int>(g_glassActive);
     ScrollMenuTo(0);
-    const int offset = g_glassActive ? 58 : 0;
     const int logicalWidth = MenuLogicalWidth();
     const int halfWidth = (logicalWidth - 40) / 2;
     const int themeGap = (logicalWidth - 32 - 5 * 44) / 4;
-    const std::pair<int, int> rows[] = {{kMenuGlass, 104},         {kMenuTopmost, 166},       {kMenuPassThrough, 202},
-                                        {kMenuTheme, 238},         {kMenuLanguage, 316},      {kMenuAutostart, 352},
-                                        {kMenuToggleVisible, 388}, {kMenuExit, 388},          {kMenuThemeBase, 274},
-                                        {kMenuThemeBase + 1, 274}, {kMenuThemeBase + 2, 274}, {kMenuThemeBase + 3, 274},
-                                        {kMenuThemeBase + 4, 274}};
+    const std::pair<int, int> rows[] = {
+        {kMenuGlass, 104},         {kMenuTopmost, 166},       {kMenuPassThrough, 202},
+        {kMenuTheme, 238},         {kMenuThemeBase, 274},     {kMenuThemeBase + 1, 274},
+        {kMenuThemeBase + 2, 274}, {kMenuThemeBase + 3, 274}, {kMenuThemeBase + 4, 274},
+        {kMenuTextColor, 316},     {kMenuAutoTextColor, 352}, {kMenuShadow, 388},
+        {kMenuLanguage, 424},      {kMenuAutostart, 460},     {kMenuToggleVisible, 496},
+        {kMenuExit, 496}};
     for (const auto& row : rows) {
         HWND child = GetDlgItem(g_menu, row.first);
         int x = 16;
@@ -1214,14 +1275,12 @@ void LayoutMenuForMode() {
             x = 24 + halfWidth;
             width = halfWidth;
         }
-        SetWindowPos(child, nullptr, ScaleForDpi(g_window, x), ScaleForDpi(g_window, row.second - offset),
+        SetWindowPos(child, nullptr, ScaleForDpi(g_window, x), ScaleForDpi(g_window, row.second),
                      ScaleForDpi(g_window, width), ScaleForDpi(g_window, 30), SWP_NOZORDER | SWP_NOACTIVATE);
     }
     SetWindowPos(g_slider, nullptr, ScaleForDpi(g_window, 12), ScaleForDpi(g_window, 70),
                  ScaleForDpi(g_window, logicalWidth - 24), ScaleForDpi(g_window, 26), SWP_NOZORDER | SWP_NOACTIVATE);
-    if (g_glassActive && GetFocus() == g_slider)
-        SetFocus(g_menuGlass);
-    ShowWindow(g_slider, g_glassActive ? SW_HIDE : SW_SHOWNOACTIVATE);
+    ShowWindow(g_slider, SW_SHOWNOACTIVATE);
     if (IsWindowVisible(g_menu)) {
         MONITORINFO monitor{sizeof(monitor)};
         GetMonitorInfoW(MonitorFromWindow(g_window, MONITOR_DEFAULTTONEAREST), &monitor);
@@ -1315,6 +1374,7 @@ LRESULT CALLBACK MenuProcedure(HWND window, UINT message, WPARAM wp, LPARAM lp) 
     case WM_COMMAND: {
         const int command = LOWORD(wp);
         if (command == kMenuTopmost || command == kMenuAutostart || command == kMenuGlass || command == kMenuLanguage ||
+            command == kMenuAutoTextColor || command == kMenuShadow ||
             (command >= kMenuThemeBase && command < kMenuThemeBase + static_cast<int>(ARRAYSIZE(kThemeColors)))) {
             HandleMenuCommand(command);
             UpdateMenuLabels();
@@ -1335,30 +1395,29 @@ LRESULT CALLBACK MenuProcedure(HWND window, UINT message, WPARAM wp, LPARAM lp) 
         DrawSurface(window, dc);
         const int saved = SaveDC(dc);
         SetViewportOrgEx(dc, 0, -g_menuScroll, nullptr);
-        const int offset = g_glassActive ? 58 : 0;
         SelectObject(dc, g_uiFont);
         SetTextColor(dc, kText);
         SetBkMode(dc, TRANSPARENT);
         RECT title{ScaleForDpi(window, 16), ScaleForDpi(window, 13), ScaleForDpi(window, MenuLogicalWidth() - 16),
                    ScaleForDpi(window, 36)};
         DrawTextW(dc, Text().settingsTitle, -1, &title, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
-        if (!g_glassActive) {
+        {
             RECT label{ScaleForDpi(window, 16), ScaleForDpi(window, 46), ScaleForDpi(window, MenuLogicalWidth() - 16),
                        ScaleForDpi(window, 67)};
             DrawTextW(dc, Text().backgroundOpacity, -1, &label, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
             std::wstring opacity = std::to_wstring(g_settings.opacityPercent) + L"%";
             DrawTextW(dc, opacity.c_str(), -1, &label, DT_RIGHT | DT_SINGLELINE | DT_VCENTER);
         }
-        RECT glassHint{ScaleForDpi(window, 16), ScaleForDpi(window, 139 - offset),
-                       ScaleForDpi(window, MenuLogicalWidth() - 16), ScaleForDpi(window, 160 - offset)};
+        RECT glassHint{ScaleForDpi(window, 16), ScaleForDpi(window, 139),
+                       ScaleForDpi(window, MenuLogicalWidth() - 16), ScaleForDpi(window, 160)};
         SetTextColor(dc, BlendColor(kBackground, kText, 70));
         DrawTextW(dc,
                   g_glassActive       ? Text().glassHint
                   : !g_settings.glass ? Text().normalHint
                                       : g_glassStatus.c_str(),
                   -1, &glassHint, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
-        RECT hint{ScaleForDpi(window, 12), ScaleForDpi(window, 429 - offset),
-                  ScaleForDpi(window, MenuLogicalWidth() - 12), ScaleForDpi(window, 468 - offset)};
+        RECT hint{ScaleForDpi(window, 12), ScaleForDpi(window, 537),
+                  ScaleForDpi(window, MenuLogicalWidth() - 12), ScaleForDpi(window, 576)};
         const bool error = g_saveFailed || g_settingsFailed || g_loadFailed;
         SetTextColor(dc, error ? (Luminance(kBackground) < 0.18 ? RGB(255, 165, 152) : RGB(157, 53, 44))
                                : BlendColor(kBackground, kText, 70));
@@ -1422,10 +1481,13 @@ void TogglePillMenu() {
         g_menuTheme = button(kMenuTheme, Text().customTheme, 16, 238, 248);
         for (int i = 0; i < static_cast<int>(ARRAYSIZE(kThemeColors)); ++i)
             button(kMenuThemeBase + i, Text().themeNames[i], 16 + i * 51, 274, 44);
-        g_menuLanguage = button(kMenuLanguage, Text().language, 16, 316, 248);
-        g_menuAutostart = button(kMenuAutostart, Text().autostart, 16, 352, 248);
-        g_menuHide = button(kMenuToggleVisible, Text().hideWindow, 16, 388, 120);
-        g_menuExit = button(kMenuExit, Text().exit, 144, 388, 120);
+        g_menuTextColor = button(kMenuTextColor, Text().textColor, 16, 316, 248);
+        g_menuAutoTextColor = button(kMenuAutoTextColor, Text().autoTextColor, 16, 352, 248);
+        g_menuShadow = button(kMenuShadow, Text().shadow, 16, 388, 248);
+        g_menuLanguage = button(kMenuLanguage, Text().language, 16, 424, 248);
+        g_menuAutostart = button(kMenuAutostart, Text().autostart, 16, 460, 248);
+        g_menuHide = button(kMenuToggleVisible, Text().hideWindow, 16, 496, 120);
+        g_menuExit = button(kMenuExit, Text().exit, 144, 496, 120);
         RoundWindow(g_menu, kCornerRadius);
     }
     UpdateMenuLabels();
@@ -1846,6 +1908,8 @@ struct SurfaceBuffer {
     }
 };
 SurfaceBuffer g_surface;
+SurfaceBuffer g_textOnBlack;
+SurfaceBuffer g_textOnWhite;
 
 DWORD PremultiplyPixel(COLORREF rgb, int alpha) {
     return (static_cast<DWORD>(alpha) << 24) | ((GetRValue(rgb) * alpha / 255) << 16) |
@@ -1988,6 +2052,11 @@ void RenderLayeredWindow() {
     SurfaceBuffer& surface = g_surface;
     if (!surface.Resize(width, height))
         return;
+    RECT editorClient{};
+    GetClientRect(g_edit, &editorClient);
+    if (!g_textOnBlack.Resize(editorClient.right, editorClient.bottom) ||
+        !g_textOnWhite.Resize(editorClient.right, editorClient.bottom))
+        return;
     g_rendering = true;
 #ifdef FLOATNOTE_DIAGNOSTICS
     ++g_renderCount;
@@ -2009,6 +2078,16 @@ void RenderLayeredWindow() {
     RECT editor{};
     GetWindowRect(g_edit, &editor);
     OffsetRect(&editor, -outer.left, -outer.top);
+    // Obtain coverage directly from white glyphs on black, independent of the
+    // theme or chosen ink. A white-background pass identifies opaque native
+    // selection/IME pixels (unchanged between passes), which retain their colors.
+    for (int pass : {1, 2}) {
+        auto& mask = pass == 1 ? g_textOnBlack : g_textOnWhite;
+        g_textMask = pass;
+        FillRect(mask.dc, &editorClient, static_cast<HBRUSH>(GetStockObject(pass == 1 ? BLACK_BRUSH : WHITE_BRUSH)));
+        SendMessageW(g_edit, WM_PRINT, reinterpret_cast<WPARAM>(mask.dc), PRF_CLIENT | PRF_ERASEBKGND);
+    }
+    g_textMask = 0;
     // Alpha 1 (less than half a percent) keeps the invisible input surface
     // hittable at 0%. Pass-through mode can use exact zero alpha.
     const int opacity =
@@ -2021,32 +2100,20 @@ void RenderLayeredWindow() {
             const DWORD rgb = pixel & 0xffffff;
             const COLORREF color = RGB((rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255);
             pixel = PremultiplyPixel(color, rgb == background ? opacity : 255);
-            // Recover grayscale antialias coverage within the text rectangle.
-            // Selection colors do not lie on this line and stay fully opaque.
-            if (rgb != background && x >= editor.left && x < editor.right && y >= editor.top && y < editor.bottom) {
-                int bgChannels[3]{GetRValue(kBackground), GetGValue(kBackground), GetBValue(kBackground)};
-                int fgChannels[3]{GetRValue(kText), GetGValue(kText), GetBValue(kText)};
-                int channels[3]{GetRValue(color), GetGValue(color), GetBValue(color)};
-                int strongest = 0;
-                for (int i = 1; i < 3; ++i)
-                    if (abs(fgChannels[i] - bgChannels[i]) > abs(fgChannels[strongest] - bgChannels[strongest]))
-                        strongest = i;
-                const int delta = fgChannels[strongest] - bgChannels[strongest];
-                if (delta != 0) {
-                    const int coverage =
-                        std::clamp(MulDiv(channels[strongest] - bgChannels[strongest], 255, delta), 0, 255);
-                    bool textEdge = true;
-                    for (int i = 0; i < 3; ++i)
-                        if (abs(channels[i] - (bgChannels[i] + MulDiv(fgChannels[i] - bgChannels[i], coverage, 255))) >
-                            2)
-                            textEdge = false;
-                    if (textEdge) {
-                        const int alpha = coverage + MulDiv(255 - coverage, opacity, 255);
-                        int premult[3]{};
-                        for (int i = 0; i < 3; ++i)
-                            premult[i] = (fgChannels[i] * coverage + bgChannels[i] * (alpha - coverage)) / 255;
-                        pixel = (static_cast<DWORD>(alpha) << 24) | (premult[0] << 16) | (premult[1] << 8) | premult[2];
-                    }
+            if (x >= editor.left && x < editor.right && y >= editor.top && y < editor.bottom) {
+                const int index = (y - editor.top) * g_textOnBlack.width + x - editor.left;
+                const DWORD black = g_textOnBlack.pixels[index] & 0xffffff;
+                const DWORD white = g_textOnWhite.pixels[index] & 0xffffff;
+                if (black == white) {
+                    pixel = PremultiplyPixel(color, 255);
+                } else {
+                    const int coverage = static_cast<int>(black & 255);
+                    const int residual = MulDiv(255 - coverage, opacity, 255);
+                    const int alpha = coverage + residual;
+                    const int red = (GetRValue(kNoteText) * coverage + GetRValue(kBackground) * residual) / 255;
+                    const int green = (GetGValue(kNoteText) * coverage + GetGValue(kBackground) * residual) / 255;
+                    const int blue = (GetBValue(kNoteText) * coverage + GetBValue(kBackground) * residual) / 255;
+                    pixel = (static_cast<DWORD>(alpha) << 24) | (red << 16) | (green << 8) | blue;
                 }
             }
             if ((x < radius || x >= width - radius) && (y < radius || y >= height - radius)) {
@@ -2072,7 +2139,7 @@ void RenderLayeredWindow() {
             IntersectRect(&caret, &caret, &editor);
             for (int y = std::max(0L, caret.top); y < std::min(height, static_cast<int>(caret.bottom)); ++y)
                 for (int x = std::max(0L, caret.left); x < std::min(width, static_cast<int>(caret.right)); ++x)
-                    surface.pixels[y * width + x] = PremultiplyPixel(kText, 255);
+                    surface.pixels[y * width + x] = PremultiplyPixel(kNoteText, 255);
         }
     }
     POINT position{outer.left, outer.top}, source{};
@@ -2181,6 +2248,7 @@ LRESULT CALLBACK WindowProcedure(HWND window, UINT message, WPARAM wParam, LPARA
             DestroyWindow(g_menu);
         g_menu = g_slider = g_menuTopmost = g_menuAutostart = g_menuHide = g_menuExit = nullptr;
         g_menuGlass = g_menuPassThrough = g_menuTheme = g_menuLanguage = nullptr;
+        g_menuTextColor = g_menuAutoTextColor = g_menuShadow = nullptr;
         RecreateFonts(window);
         SetWindowPos(window, nullptr, rect->left, rect->top, rect->right - rect->left, rect->bottom - rect->top,
                      SWP_NOZORDER | SWP_NOACTIVATE);
@@ -2260,7 +2328,12 @@ LRESULT CALLBACK WindowProcedure(HWND window, UINT message, WPARAM wParam, LPARA
         return 0;
     case WM_CTLCOLOREDIT:
     case WM_CTLCOLORSTATIC:
-        SetTextColor(reinterpret_cast<HDC>(wParam), kText);
+        if (g_textMask && reinterpret_cast<HWND>(lParam) == g_edit) {
+            SetTextColor(reinterpret_cast<HDC>(wParam), RGB(255, 255, 255));
+            SetBkColor(reinterpret_cast<HDC>(wParam), g_textMask == 1 ? RGB(0, 0, 0) : RGB(255, 255, 255));
+            return reinterpret_cast<LRESULT>(GetStockObject(g_textMask == 1 ? BLACK_BRUSH : WHITE_BRUSH));
+        }
+        SetTextColor(reinterpret_cast<HDC>(wParam), reinterpret_cast<HWND>(lParam) == g_edit ? kNoteText : kText);
         SetBkColor(reinterpret_cast<HDC>(wParam), kBackground);
         return reinterpret_cast<LRESULT>(g_editBrush);
     case WM_DRAWITEM:

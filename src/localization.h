@@ -62,6 +62,9 @@ struct LocalizedStrings {
     const wchar_t* languageAutomatic;
     const wchar_t* languageChinese;
     const wchar_t* languageEnglish;
+    const wchar_t* textColor;
+    const wchar_t* autoTextColor;
+    const wchar_t* shadow;
 };
 
 inline const LocalizedStrings& ChineseStrings() {
@@ -101,7 +104,7 @@ inline const LocalizedStrings& ChineseStrings() {
         L"已选择",
         L"使用菜单切换",
         L"便签设置",
-        L"模糊背景，底色固定全透",
+        L"模糊桌面 · 可调节背景不透明度",
         L"普通模式 · 自由调节背景",
         L"读取失败，原笔记已保留",
         L"笔记保存失败 · Ctrl+S 重试",
@@ -118,7 +121,10 @@ inline const LocalizedStrings& ChineseStrings() {
         L"FloatNote · 保存失败",
         L"自动",
         L"中文",
-        L"English"};
+        L"English",
+        L"自定义文字颜色…",
+        L"自动选择文字颜色",
+        L"窗口阴影"};
     return value;
 }
 
@@ -161,7 +167,7 @@ inline const LocalizedStrings& EnglishStrings() {
         L"Selected",
         L"Use menu to toggle",
         L"Note settings",
-        L"Blurred background · Tint fixed at 0%",
+        L"Blurred desktop · Adjustable background",
         L"Standard mode · Adjustable background",
         L"Read failed · Original note kept",
         L"Save failed · Press Ctrl+S to retry",
@@ -179,7 +185,10 @@ inline const LocalizedStrings& EnglishStrings() {
         L"FloatNote · Save failed",
         L"Automatic",
         L"中文",
-        L"English"};
+        L"English",
+        L"Custom text color…",
+        L"Automatic text color",
+        L"Window shadow"};
     return value;
 }
 

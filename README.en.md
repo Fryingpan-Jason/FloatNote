@@ -9,9 +9,9 @@ FloatNote is a lightweight, portable desktop memo for Windows. It is written in 
 ## Features
 
 - One persistent desktop note with automatic local saving beside the executable.
-- Native rounded glass on Windows 11; standard background opacity from 0–100%.
-- Glass and standard transparency are separate modes. Glass uses zero app tint, while standard mode remembers its previous opacity.
-- Five presets, custom RGB colors, and automatic high-contrast text.
+- Rounded glass on Windows 11 with an optional window shadow.
+- Both modes share background opacity from 0–100%. Zero shows the desktop (blurred when glass is on); 100% covers it with the theme color. Text stays opaque.
+- Five presets and custom RGB colors. Text color can be automatic or custom, with an option to return to automatic selection.
 - Optional always-on-top, mouse click-through, tray menu, and startup shortcut.
 - English and Simplified Chinese UI. Follow Windows by default or choose a language in settings or the tray menu.
 - Per-monitor DPI, display hot-plug recovery, High Contrast, Energy Saver, and Remote Desktop fallbacks.

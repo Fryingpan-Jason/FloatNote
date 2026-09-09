@@ -11,6 +11,8 @@ FloatNote intentionally stays close to the Windows API. The production executabl
 - `src/version.h` / `src/resources.rc` — the single product version and executable metadata.
 - `tests/regression.cpp` — hidden, deterministic native behavior checks.
 - `tests/integration.cpp` — focused compositor and interaction checks that open temporary windows.
+- `tests/visuals.cpp` — shadow, tint, text antialiasing, custom text color, and settings screenshot checks.
+- `tests/visual_test_support.h` — shared fixtures and compositor capture helpers.
 - `build.ps1` — MSVC discovery and x64/x86/ARM64 builds.
 - `scripts/package.ps1` — portable release archive creation.
 
@@ -26,9 +28,12 @@ The default test source is `tests/regression.cpp`. A focused source can be selec
 
 ```powershell
 .\build.ps1 -Test -SourceFile tests\integration.cpp -OutputDirectory build\integration
+.\build.ps1 -Test -SourceFile tests\visuals.cpp -OutputDirectory build\visuals
 ```
 
 The integration test opens visible fixture windows and writes screenshots under its isolated output directory. Do not point tests at a user's portable `data` directory.
+
+Run the visual checks in an interactive Windows 11 desktop with transparency effects enabled. They require a desktop large enough to display the 800 × 500 fixture and are not part of headless CI. They use synthetic note text; keep their generated screenshots and data out of source control.
 
 ## Versioning
 

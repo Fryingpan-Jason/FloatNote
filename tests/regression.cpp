@@ -258,11 +258,11 @@ int main() {
         g_settings.glass = true;
         ApplyVisuals(g_window);
         SetOpacityPercent(12);
-        Check(EffectiveOpacityPercent() == 0 && g_settings.opacityPercent == 67,
-              "glass is fixed at zero and cannot overwrite ordinary opacity");
+        Check(EffectiveOpacityPercent() == 12 && g_settings.opacityPercent == 12,
+              "glass uses the same adjustable background opacity as ordinary mode");
         g_settings.glass = false;
         ApplyVisuals(g_window);
-        Check(EffectiveOpacityPercent() == 67, "ordinary opacity survives the glass round trip");
+        Check(EffectiveOpacityPercent() == 12, "background opacity survives the glass round trip");
         SetOpacityPercent(0);
         g_isVisible = true;
         RenderLayeredWindow();
