@@ -1456,6 +1456,26 @@ void TogglePillMenu() {
     SetFocus(g_slider);
 }
 
+void ResizeWindowFromPointerDelta(int dx, int dy) {
+    MONITORINFO monitor{sizeof(monitor)};
+    GetMonitorInfoW(MonitorFromWindow(g_window, MONITOR_DEFAULTTONEAREST), &monitor);
+    const int maxWidth =
+        std::max(ScaleForDpi(g_window, 180), static_cast<int>(monitor.rcWork.right - monitor.rcWork.left));
+    const int maxHeight =
+        std::max(ScaleForDpi(g_window, 90), static_cast<int>(monitor.rcWork.bottom - monitor.rcWork.top));
+    SetWindowPos(g_window, nullptr, 0, 0,
+                 std::clamp(static_cast<int>(g_pointerWindow.right - g_pointerWindow.left) + dx,
+                            ScaleForDpi(g_window, 180), maxWidth),
+                 std::clamp(static_cast<int>(g_pointerWindow.bottom - g_pointerWindow.top) + dy,
+                            ScaleForDpi(g_window, 90), maxHeight),
+                 SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
+void MoveWindowFromPointerDelta(int dx, int dy) {
+    SetWindowPos(g_window, nullptr, g_pointerWindow.left + dx, g_pointerWindow.top + dy, 0, 0,
+                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
 LRESULT CALLBACK PointerProcedure(HWND window, UINT message, WPARAM wp, LPARAM lp, UINT_PTR id, DWORD_PTR) {
     if (message == BM_CLICK && id == kControlPill) {
         PostMessageW(g_window, WM_COMMAND, kControlPill, 0);
@@ -1524,22 +1544,10 @@ LRESULT CALLBACK PointerProcedure(HWND window, UINT message, WPARAM wp, LPARAM l
                 g_pointerDragged = true;
             if (g_pointerDragged) {
                 CloseMenu();
-                if (id == kControlGrip) {
-                    MONITORINFO monitor{sizeof(monitor)};
-                    GetMonitorInfoW(MonitorFromWindow(g_window, MONITOR_DEFAULTTONEAREST), &monitor);
-                    const int maxWidth = std::max(ScaleForDpi(g_window, 180),
-                                                  static_cast<int>(monitor.rcWork.right - monitor.rcWork.left));
-                    const int maxHeight = std::max(ScaleForDpi(g_window, 90),
-                                                   static_cast<int>(monitor.rcWork.bottom - monitor.rcWork.top));
-                    SetWindowPos(g_window, nullptr, 0, 0,
-                                 std::clamp(static_cast<int>(g_pointerWindow.right - g_pointerWindow.left) + dx,
-                                            ScaleForDpi(g_window, 180), maxWidth),
-                                 std::clamp(static_cast<int>(g_pointerWindow.bottom - g_pointerWindow.top) + dy,
-                                            ScaleForDpi(g_window, 90), maxHeight),
-                                 SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
-                } else
-                    SetWindowPos(g_window, nullptr, g_pointerWindow.left + dx, g_pointerWindow.top + dy, 0, 0,
-                                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+                if (id == kControlGrip)
+                    ResizeWindowFromPointerDelta(dx, dy);
+                else
+                    MoveWindowFromPointerDelta(dx, dy);
             }
         }
         return 0;

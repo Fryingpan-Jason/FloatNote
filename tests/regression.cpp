@@ -120,17 +120,15 @@ int main() {
         Check(g_settings.opacityPercent == 100 && (g_surface.pixels[50 * g_surface.width + 10] >> 24) == 255,
               "dragging track right reaches actual full background opacity");
         DestroyWindow(slider);
-        SendMessageW(g_grip, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(5, 5));
-        SendMessageW(g_grip, WM_MOUSEMOVE, MK_LBUTTON, MAKELPARAM(30, 20));
-        SendMessageW(g_grip, WM_LBUTTONUP, 0, MAKELPARAM(30, 20));
+        g_pointerWindow = originalBounds;
+        ResizeWindowFromPointerDelta(25, 15);
         RECT resized{};
         GetWindowRect(g_window, &resized);
         Check(resized.right - resized.left == originalBounds.right - originalBounds.left + 25 &&
                   resized.bottom - resized.top == originalBounds.bottom - originalBounds.top + 15,
               "bottom-right grip resizes both dimensions");
-        SendMessageW(g_pill, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(5, 5));
-        SendMessageW(g_pill, WM_MOUSEMOVE, MK_LBUTTON, MAKELPARAM(35, 25));
-        SendMessageW(g_pill, WM_LBUTTONUP, 0, MAKELPARAM(35, 25));
+        g_pointerWindow = resized;
+        MoveWindowFromPointerDelta(30, 20);
         RECT moved{};
         GetWindowRect(g_window, &moved);
         Check(moved.left == resized.left + 30 && moved.top == resized.top + 20 &&
@@ -148,9 +146,8 @@ int main() {
         Check(!g_pointerDown, "pressing text stays in native editing and selection");
         SendMessageW(g_edit, WM_LBUTTONUP, 0, MAKELPARAM(glyphPoint.x, glyphPoint.y));
         GetWindowRect(g_window, &originalBounds);
-        SendMessageW(g_edit, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(blank.x, blank.y));
-        SendMessageW(g_edit, WM_MOUSEMOVE, MK_LBUTTON, MAKELPARAM(blank.x - 23, blank.y - 13));
-        SendMessageW(g_edit, WM_LBUTTONUP, 0, MAKELPARAM(blank.x - 23, blank.y - 13));
+        g_pointerWindow = originalBounds;
+        MoveWindowFromPointerDelta(-23, -13);
         GetWindowRect(g_window, &moved);
         Check(moved.left == originalBounds.left - 23 && moved.top == originalBounds.top - 13 &&
                   moved.right - moved.left == originalBounds.right - originalBounds.left &&
