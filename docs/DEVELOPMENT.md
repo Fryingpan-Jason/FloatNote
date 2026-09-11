@@ -2,6 +2,8 @@
 
 FloatNote intentionally stays close to the Windows API. The production executable uses the static MSVC runtime and Windows system DLLs only.
 
+For the liquid-glass renderer, source map and adaptation boundaries, start with [Implement Liquid Glass on Windows](WINDOWS_LIQUID_GLASS.md).
+
 ## Layout
 
 - `experiments/local_desktop.cpp` — default 2.0 desktop entry; standard app identity, startup and shortcuts.

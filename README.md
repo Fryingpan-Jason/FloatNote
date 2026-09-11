@@ -1,12 +1,18 @@
-# FloatNote 2.0
+# FloatNote — Native Liquid Glass for Windows
 
 [English](README.en.md) · 简体中文
 
-原生 Windows 桌面便签，支持液态玻璃、毛玻璃和纯色外观。文字保留原生编辑、选择、输入法和撤销，便签与设置自动保存到本地。
+**Windows 原生液态玻璃便签与实现参考。** FloatNote 2.0 使用 C++/Win32、Direct3D 11、HLSL 和 Windows Graphics Capture，实现边缘折射、背景自适应反光和弹性动画，并提供可直接运行的便签应用。
+
+Native Windows Liquid Glass implementation in C++/Win32 with Direct3D 11, HLSL and Windows Graphics Capture. MIT-licensed source for implementation reference, demonstrated in a portable floating-note app.
+
+文字保留原生编辑、选择、输入法和撤销，便签与设置自动保存到本地；外观可切换液态玻璃、系统毛玻璃或纯色。
+
+**想在自己的 Windows 应用中实现液态玻璃？** 阅读 [Implement Liquid Glass on Windows — 源码入口与实现说明](docs/WINDOWS_LIQUID_GLASS.md)，了解采集、光学表面、折射、高光、动画及 Windows 特有限制。当前是完整应用中的实现参考，并非独立 SDK。
 
 ## 直接下载使用
 
-**[下载最新版便携包](https://github.com/Fryingpan-Jason/FloatNote/releases/latest)**，解压后双击 `FloatNote.exe`，无需编译源码、安装开发工具或额外运行库。
+**[下载最新版便携包](https://github.com/Fryingpan-Jason/FloatNote-Liquid-Glass/releases/latest)**，解压后双击 `FloatNote.exe`，无需编译源码、安装开发工具或额外运行库。
 
 | 下载文件 | 适用设备 |
 | --- | --- |

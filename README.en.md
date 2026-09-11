@@ -1,12 +1,16 @@
-# FloatNote 2.0
+# FloatNote — Native Liquid Glass for Windows
 
 English · [简体中文](README.md)
 
-A portable native Windows desktop note with liquid glass, frosted glass and solid backgrounds. Text uses the native Windows editor, with selection, IME input and undo. Notes and preferences stay local.
+**A native Windows Liquid Glass implementation and a ready-to-run floating-note app.** FloatNote 2.0 uses C++/Win32, Direct3D 11, HLSL and Windows Graphics Capture for edge refraction, background-responsive reflections and spring animations. The implementation is MIT licensed.
+
+**Building Liquid Glass for your own Windows app?** Start with [Implement Liquid Glass on Windows](docs/WINDOWS_LIQUID_GLASS.md): source entry points, rendering pipeline, reuse boundaries and Windows capture limitations. This is implementation reference inside a complete application, not a standalone SDK.
+
+The app also offers frosted and solid backgrounds. Text uses the native Windows editor, with selection, IME input and undo. Notes and preferences stay local.
 
 ## Download an app, not source code
 
-**[Download the latest portable release](https://github.com/Fryingpan-Jason/FloatNote/releases/latest)**, extract the ZIP, and run `FloatNote.exe`. No compiler, development tools or additional runtime installation is required.
+**[Download the latest portable release](https://github.com/Fryingpan-Jason/FloatNote-Liquid-Glass/releases/latest)**, extract the ZIP, and run `FloatNote.exe`. No compiler, development tools or additional runtime installation is required.
 
 | File | Choose for |
 | --- | --- |

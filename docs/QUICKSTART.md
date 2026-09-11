@@ -13,4 +13,4 @@ Ctrl+Alt+E restores editing, Ctrl+Alt+H toggles visibility, and Ctrl+Alt+P toggl
 Exit before upgrading, replace the EXE and keep your data folder. Use frosted glass when screenshot/remote visibility is needed.
 The new settings panel is currently in Chinese. Binaries are unsigned; checksums are provided on the release page.
 
-Downloads / feedback: https://github.com/Fryingpan-Jason/FloatNote/releases/latest
+Downloads / feedback: https://github.com/Fryingpan-Jason/FloatNote-Liquid-Glass/releases/latest
