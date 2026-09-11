@@ -4,6 +4,11 @@ FloatNote intentionally stays close to the Windows API. The production executabl
 
 ## Layout
 
+- `experiments/local_desktop.cpp` — default 2.0 desktop entry; standard app identity, startup and shortcuts.
+- `experiments/glass_lab.cpp` and `glass_experience.h` — shared material controls and interaction integration.
+- `experiments/glass_control_*.h` — independent control/settings windows.
+- `src/liquid_backdrop.h` and `monitor_backdrop_capture.h` — local GPU material and monitor capture.
+
 - `src/main.cpp` — Win32 window, input, persistence, tray, and rendering behavior.
 - `src/backdrop.h` — isolated Windows Composition host-backdrop integration.
 - `src/platform.h` — small Windows helpers and atomic file writes.
@@ -46,7 +51,9 @@ Update `src/version.h` once. The executable resource, package script, release fi
 .\scripts\package.ps1 -Architecture x86
 ```
 
-The GitHub workflow builds x64, x86, and native ARM64 packages. A `v*` tag also creates a GitHub release with all archives and `SHA256SUMS.txt`.
+The GitHub workflow builds x64, x86, and native ARM64 packages, running native and glass regression tests. A `v*` tag creates a **draft** GitHub release with the three archives and `SHA256SUMS.txt`. Verify the assets and checksums, then publish the draft. Default `build.ps1` and `package.ps1` both use the 2.0 desktop entry.
+
+Package staging uses a fixed file allowlist: EXE, bilingual README, quick start, project license and third-party notices. Never copy a development build directory or its `data` into a release. Packaging checks the PE architecture and embedded version before producing a ZIP.
 
 ## Design constraints
 

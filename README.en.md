@@ -1,67 +1,54 @@
-# FloatNote
+# FloatNote 2.0
 
 English · [简体中文](README.md)
 
-FloatNote is a lightweight, portable desktop memo for Windows. It is written in native C++/Win32 and has no network access, account, installer, or third-party runtime dependency.
+A portable native Windows desktop note with liquid glass, frosted glass and solid backgrounds. Text uses the native Windows editor, with selection, IME input and undo. Notes and preferences stay local.
 
-![FloatNote glass interface on Windows 11](docs/images/floatnote.png)
+## Download an app, not source code
 
-## Features
+**[Download the latest portable release](https://github.com/Fryingpan-Jason/FloatNote/releases/latest)**, extract the ZIP, and run `FloatNote.exe`. No compiler, development tools or additional runtime installation is required.
 
-- One persistent desktop note with automatic local saving beside the executable.
-- Rounded glass on Windows 11 with an optional window shadow.
-- Both modes share background opacity from 0–100%. Zero shows the desktop (blurred when glass is on); 100% covers it with the theme color. Text stays opaque.
-- Five presets and custom RGB colors. Text color can be automatic or custom, with an option to return to automatic selection.
-- Optional always-on-top, mouse click-through, tray menu, and startup shortcut.
-- English and Simplified Chinese UI. Follow Windows by default or choose a language in settings or the tray menu.
-- Per-monitor DPI, display hot-plug recovery, High Contrast, Energy Saver, and Remote Desktop fallbacks.
-
-## Download and use
-
-Download the matching archive from [Releases](https://github.com/Fryingpan-Jason/FloatNote/releases), extract it to a writable folder, and run `FloatNote.exe`. Avoid `Program Files`: notes and settings are stored beside the executable by default.
-
-| Archive | Devices |
+| File | Choose for |
 | --- | --- |
-| `windows-x64` | Most 64-bit Intel and AMD Windows PCs |
-| `windows-x86` | 32-bit Windows 10 or environments that require a 32-bit app |
-| `windows-arm64` | Windows 11 ARM devices, including Snapdragon X PCs |
+| `FloatNote-2.0.0-windows-x64.zip` | Most Intel/AMD 64-bit PCs; recommended default |
+| `FloatNote-2.0.0-windows-arm64.zip` | Windows on ARM, including Snapdragon X devices |
+| `FloatNote-2.0.0-windows-x86.zip` | 32-bit environments or a required 32-bit process |
 
-Main controls:
+The **Source code** links on GitHub are for developers, not ready-to-run applications. Extract into a writable folder, rather than `Program Files`. Binaries are unsigned; Windows may show a SmartScreen prompt. Compare the downloaded ZIP with `SHA256SUMS.txt` on the release page if needed.
 
-- Click text to edit, drag text to select, and drag blank editor space or the top pill to move the note.
-- Resize from the bottom-right grip.
-- Use `Ctrl + wheel`, `Ctrl + +`, or `Ctrl + -` to change text size; `Ctrl+0` resets it to 13 pt.
-- `Ctrl+Alt+E` shows the note and restores editing, `Ctrl+Alt+H` hides it, and `Ctrl+Alt+P` toggles mouse click-through.
-- Double-click the tray icon or launch FloatNote again to restore editing.
+## What's new
 
-## Windows version differences
+- Liquid glass with continuous edge refraction, background-responsive reflections, edge softness and adjustable dispersion. Frosted and solid modes remain available.
+- A compact top control expands into settings and close actions when approached, then retracts when you leave.
+- Shrink the note vertically to tuck it into a small status bar; click to restore. Absorption, restoration and arrival bounce share continuous geometry.
+- Pinning, mouse click-through, preset/custom background and text colors, font size and blur controls.
+- Choose between hiding to the tray and exiting when closing, and optionally remember the choice.
+- Single-instance behavior, startup integration and global recovery shortcuts.
 
-| Environment | Behavior |
-| --- | --- |
-| Windows 11 | Native rounded glass and standard transparency. Glass requires Windows transparency effects. |
-| Windows 10 1809–22H2 | Standard transparency is supported. Glass falls back; native rounded glass is not promised. |
-| Earlier than Windows 10 | Unsupported. |
-| High Contrast | Uses opaque system colors and system text colors. |
-| Energy Saver / Remote Desktop | Pauses glass and uses the standard background to reduce cost or avoid compositor differences. |
+## Use and upgrade
 
-See [Compatibility](docs/COMPATIBILITY.md) for tested boundaries and caveats.
+- Hover near the top hint to reveal settings; drag the bottom-right grip to resize.
+- `Ctrl+Alt+E`: show and restore editing. `Ctrl+Alt+H`: toggle visibility. `Ctrl+Alt+P`: toggle mouse click-through.
+- Double-click the tray icon or run the app again to recover your note.
+- `Ctrl+wheel`, `Ctrl++` and `Ctrl+-` change font size.
+- To upgrade from 1.x, exit the old app and replace `FloatNote.exe` in the same folder. **Keep the existing `data` folder**, and back it up first if you want an easy rollback.
 
-## Data and privacy
+Archives contain no note data or personal settings. The app creates `data/note.txt`, `settings.ini`, `material.ini` and `experience.ini` locally. It has no accounts, telemetry or network client. Screen pixels used for glass are processed locally through Windows APIs and the GPU, never uploaded.
 
-FloatNote has no network access or telemetry. `data/note.txt` is UTF-8 text, and `data/settings.ini` stores window and appearance preferences. Writes use a temporary file followed by an atomic replacement. Read and save failures preserve the original note instead of replacing it with an error message.
+## Platform and language limits
+
+Liquid glass is intended for supported Windows 11 capture/composition environments. Accessibility, power, remote-session and API limitations can trigger fallback; see [compatibility](docs/COMPATIBILITY.md). The live liquid-glass note can be absent from screenshots or third-party remote streams; choose frosted glass when capture visibility matters. The top control is drawn independently as a recovery route.
+
+**The new 2.0 settings panel, close prompt and material controls are currently in Chinese.** Existing tray and basic UI language options remain available. A complete English translation of the new panel is not claimed for this release.
 
 ## Build
 
-Visual Studio C++ tools and the Windows 10/11 SDK are required:
+With Visual Studio C++ tools and a Windows SDK, the default build produces the 2.0 desktop app:
 
 ```powershell
-.\build.ps1 -Architecture x64
-.\build.ps1 -Architecture x86 -OutputDirectory build\x86
+.\build.ps1 -Architecture x64 -OutputDirectory build\x64
 .\build.ps1 -Test -OutputDirectory build\tests
+.\scripts\package.ps1 -Architecture x64
 ```
 
-ARM64 can be built with Visual Studio ARM64 C++ tools or on GitHub's Windows 11 ARM runner. See [Development](docs/DEVELOPMENT.md) for the build, test, and release flow.
-
-## Contributing
-
-Issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first. FloatNote is available under the [MIT License](LICENSE).
+See [development](docs/DEVELOPMENT.md). MIT licensed; adapted material code is credited in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

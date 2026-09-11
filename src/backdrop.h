@@ -2,15 +2,25 @@
 #include <wrl.h>
 #include <wrl/wrappers/corewrappers.h>
 #include <roapi.h>
+#include <windows.system.h>
 #include <windows.ui.composition.h>
 #include <windows.ui.composition.desktop.h>
 #include <windows.ui.composition.interop.h>
 #include <DispatcherQueue.h>
+#include <memory>
+#include <utility>
 #pragma comment(lib, "runtimeobject.lib")
 #pragma comment(lib, "CoreMessaging.lib")
 
 struct NativeBackdrop {
-    Microsoft::WRL::ComPtr<ABI::Windows::System::IDispatcherQueueController> queue;
+    struct ControllerOwner {
+        Microsoft::WRL::ComPtr<ABI::Windows::System::IDispatcherQueueController> controller;
+    };
+    // A thread may initialize the note or settings first. Share only controllers
+    // created here; the weak cache does not extend their lifetime past all users.
+    inline static thread_local std::weak_ptr<ControllerOwner> threadController;
+    std::shared_ptr<ControllerOwner> queueOwner;
+    Microsoft::WRL::ComPtr<ABI::Windows::System::IDispatcherQueue> dispatcher;
     Microsoft::WRL::ComPtr<ABI::Windows::UI::Composition::ICompositor> compositor;
     Microsoft::WRL::ComPtr<ABI::Windows::UI::Composition::ICompositionTarget> target;
     Microsoft::WRL::ComPtr<ABI::Windows::UI::Composition::IVisual> visual;
@@ -37,9 +47,30 @@ struct NativeBackdrop {
             if (FAILED(error))
                 return false;
             initialized = true;
-            DispatcherQueueOptions options{sizeof(options), DQTYPE_THREAD_CURRENT, DQTAT_COM_STA};
-            if (FAILED(error = CreateDispatcherQueueController(options, &queue)))
+            ComPtr<ABI::Windows::System::IDispatcherQueueStatics> dispatcherStatics;
+            if (FAILED(error = RoGetActivationFactory(
+                           Microsoft::WRL::Wrappers::HStringReference(L"Windows.System.DispatcherQueue").Get(),
+                           IID_PPV_ARGS(&dispatcherStatics))) ||
+                FAILED(error = dispatcherStatics->GetForCurrentThread(&dispatcher)))
                 return false;
+            if (!dispatcher) {
+                auto owner = std::make_shared<ControllerOwner>();
+                DispatcherQueueOptions options{sizeof(options), DQTYPE_THREAD_CURRENT, DQTAT_COM_STA};
+                if (FAILED(error = CreateDispatcherQueueController(options, &owner->controller)) ||
+                    FAILED(error = owner->controller->get_DispatcherQueue(&dispatcher)))
+                    return false;
+                queueOwner = owner;
+                threadController = owner;
+            } else if (auto owner = threadController.lock()) {
+                // Do not adopt an unrelated externally supplied queue if an
+                // embedding host replaced the thread's dispatcher after shutdown.
+                ComPtr<ABI::Windows::System::IDispatcherQueue> ownedDispatcher;
+                ComPtr<IUnknown> ownedIdentity, currentIdentity;
+                if (SUCCEEDED(owner->controller->get_DispatcherQueue(&ownedDispatcher)) &&
+                    SUCCEEDED(ownedDispatcher.As(&ownedIdentity)) && SUCCEEDED(dispatcher.As(&currentIdentity)) &&
+                    ownedIdentity.Get() == currentIdentity.Get())
+                    queueOwner = std::move(owner);
+            }
             ComPtr<IInspectable> instance;
             if (FAILED(error = RoActivateInstance(
                            Microsoft::WRL::Wrappers::HStringReference(L"Windows.UI.Composition.Compositor").Get(),
@@ -88,7 +119,8 @@ struct NativeBackdrop {
         visual.Reset();
         target.Reset();
         compositor.Reset();
-        queue.Reset();
+        dispatcher.Reset();
+        queueOwner.reset();
         if (initialized) {
             RoUninitialize();
             initialized = false;

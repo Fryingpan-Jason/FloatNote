@@ -1,67 +1,54 @@
-# FloatNote
+# FloatNote 2.0
 
 [English](README.en.md) · 简体中文
 
-FloatNote 是一张轻量、便携的 Windows 桌面便签。它用原生 C++ / Win32 编写，没有网络、账户、安装器和第三方运行依赖。
+原生 Windows 桌面便签，支持液态玻璃、毛玻璃和纯色外观。文字保留原生编辑、选择、输入法和撤销，便签与设置自动保存到本地。
 
-![FloatNote 在 Windows 11 上的毛玻璃界面](docs/images/floatnote.png)
+## 直接下载使用
 
-## 功能
+**[下载最新版便携包](https://github.com/Fryingpan-Jason/FloatNote/releases/latest)**，解压后双击 `FloatNote.exe`，无需编译源码、安装开发工具或额外运行库。
 
-- 单张常驻便签，文本自动保存到程序旁的 `data` 文件夹。
-- Windows 11 圆角毛玻璃，可开关窗口阴影。
-- 两种模式共用 0–100% 背景不透明度：0% 透出桌面（开启毛玻璃时为模糊桌面），100% 为纯主题色；文字不随背景变淡。
-- 五个主题色、自定义 RGB 颜色；文字颜色可自动选择或自定义，设置中可恢复自动选择。
-- 可选置顶、鼠标穿透、托盘菜单和开机自启。
-- 支持中英文界面：默认跟随 Windows，也可在设置或托盘菜单中切换。
-- 每显示器 DPI、显示器热插拔、高对比度、节能模式和远程桌面降级处理。
-
-## 下载与使用
-
-从 [Releases](https://github.com/Fryingpan-Jason/FloatNote/releases) 下载对应压缩包，解压到可写目录后运行 `FloatNote.exe`。不要放进 `Program Files`，因为便签和设置默认保存在程序旁。
-
-| 文件 | 适用设备 |
+| 下载文件 | 适用设备 |
 | --- | --- |
-| `windows-x64` | 绝大多数 Intel / AMD 64 位 Windows 电脑 |
-| `windows-x86` | 32 位 Windows 10，或必须运行 32 位程序的设备 |
-| `windows-arm64` | Windows 11 ARM 设备，例如 Snapdragon X 系列 |
+| `FloatNote-2.0.0-windows-x64.zip` | 大多数 Intel / AMD 64 位电脑，优先选择 |
+| `FloatNote-2.0.0-windows-arm64.zip` | Windows on ARM 设备，如 Snapdragon X |
+| `FloatNote-2.0.0-windows-x86.zip` | 32 位环境或需要 32 位程序时 |
 
-主要操作：
+不要下载页面底部的 **Source code** 来当作应用；那是给开发者的源码。将程序解压到可写目录，不建议放进 `Program Files`。程序未签名，Windows 可能显示 SmartScreen 提示；发布页提供 SHA-256 校验文件。
 
-- 点击文字编辑；拖动文字选择；拖动正文空白或顶部药丸移动便签。
-- 从右下角调整大小。
-- `Ctrl + 滚轮`、`Ctrl + +`、`Ctrl + -` 调整字号，`Ctrl+0` 恢复 13 pt。
-- `Ctrl+Alt+E` 显示并恢复编辑，`Ctrl+Alt+H` 隐藏，`Ctrl+Alt+P` 切换鼠标穿透。
-- 双击托盘图标或再次运行 FloatNote，也能恢复编辑。
+## 2.0 功能
 
-## Windows 版本差异
+- 液态玻璃：连续边缘折射、随背景变化的反光、柔化与可调色散；可切换系统毛玻璃或纯色。
+- 顶部操作区按需展开，提供设置和关闭；移开后收回，不占用整个便签的悬浮区域。
+- 向下压缩窗口高度可将便签收纳为带状态点的小条，点击即可恢复；收放和回弹保持连续。
+- 置顶、鼠标穿透、背景/文字颜色预设、自定义颜色、字号和模糊设置。
+- 首次关闭可选择隐藏到托盘或退出，并记住选择。
+- 单实例、托盘、开机启动和全局恢复快捷键。
 
-| 环境 | 行为 |
-| --- | --- |
-| Windows 11 | 支持原生圆角毛玻璃和普通透明模式。毛玻璃需要开启 Windows“透明效果”。 |
-| Windows 10 1809–22H2 | 支持普通透明模式；毛玻璃选择会自动回退，不承诺原生圆角毛玻璃。 |
-| Windows 10 之前 | 不支持。 |
-| 高对比度 | 强制使用系统纯色和系统文字颜色。 |
-| 节能模式 / 远程桌面 | 暂停毛玻璃，使用普通背景以降低开销或避免合成差异。 |
+## 操作与升级
 
-更细的范围和未实测边界见 [兼容性说明](docs/COMPATIBILITY.zh-CN.md)。
+- 将鼠标移到顶部提示附近，打开设置；从右下角拖动调整大小。
+- `Ctrl+Alt+E`：显示并恢复编辑；`Ctrl+Alt+H`：显示/隐藏；`Ctrl+Alt+P`：切换鼠标穿透。
+- 双击托盘图标或再次启动程序也能找回便签。
+- `Ctrl+滚轮`、`Ctrl++`、`Ctrl+-` 调整字号。
+- 从 1.x 升级：先退出旧程序，用新版 `FloatNote.exe` 替换旧文件，**保留原目录中的 `data` 文件夹**。建议升级前复制一份 `data` 备份。
 
-## 数据与隐私
+发布包不附带任何便签或个人设置；第一次运行会创建 `data/note.txt`、`settings.ini`、`material.ini` 和 `experience.ini`。程序不联网，不使用账户或遥测。液态玻璃通过系统 API 在本机 GPU 上处理屏幕背景，不上传屏幕内容。
 
-FloatNote 不联网、不收集遥测。`data/note.txt` 是 UTF-8 文本；`data/settings.ini` 保存窗口和外观设置。写入时先生成临时文件，再原子替换。读取或保存失败时保留原文件，不会用错误提示覆盖笔记。
+## 平台说明
 
-## 构建
+液态玻璃主要面向支持 Windows Graphics Capture / Composition 的 Windows 11。高对比度、节能、远程桌面或不支持的系统会降级；具体范围见[兼容性说明](docs/COMPATIBILITY.zh-CN.md)。实时液态玻璃的便签可能不出现在截图或第三方远程画面中，需要时改用毛玻璃；顶部操作区独立绘制，提供恢复入口。
 
-需要 Visual Studio C++ 工具链和 Windows 10/11 SDK：
+2.0 新增设置面板、关闭确认和材质参数目前为中文；原有托盘与基础界面保留中英文选项。此版本不承诺新面板已完整英文翻译。
+
+## 开发
+
+需要 Visual Studio C++ 工具链和 Windows SDK。默认构建就是 2.0 桌面版：
 
 ```powershell
-.\build.ps1 -Architecture x64
-.\build.ps1 -Architecture x86 -OutputDirectory build\x86
+.\build.ps1 -Architecture x64 -OutputDirectory build\x64
 .\build.ps1 -Test -OutputDirectory build\tests
+.\scripts\package.ps1 -Architecture x64
 ```
 
-ARM64 可在装有 ARM64 C++ 工具的 Visual Studio 环境或 GitHub 的 Windows 11 ARM runner 上构建。开发、测试和发布流程见 [开发说明](docs/DEVELOPMENT.md)。
-
-## 参与贡献
-
-欢迎提交问题和 Pull Request。请先阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。本项目使用 [MIT License](LICENSE)。
+详见[开发说明](docs/DEVELOPMENT.md)。基于 MIT 许可发布，材质算法适配的许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

@@ -18,14 +18,58 @@
 #include <utility>
 #include "platform.h"
 #include "backdrop.h"
+#ifdef FLOATNOTE_GLASS_LAB
+#include "liquid_backdrop.h"
+#include "glass_editor_layout.h"
+#endif
 #include "localization.h"
 #include "version.h"
 
 namespace {
 
+#ifdef FLOATNOTE_GLASS_LAB
+#ifdef FLOATNOTE_LOCAL_DESKTOP
 constexpr wchar_t kWindowClass[] = L"FloatNote.MainWindow";
 constexpr wchar_t kWindowTitle[] = L"FloatNote";
 constexpr wchar_t kMutexName[] = L"Local\\FloatNote.Singleton";
+#else
+constexpr wchar_t kWindowClass[] = L"FloatNote.GlassLab.MainWindow";
+constexpr wchar_t kWindowTitle[] = L"FloatNote · Glass Lab";
+constexpr wchar_t kMutexName[] = L"Local\\FloatNote.GlassLab.Singleton";
+#endif
+void OpenGlassLabControls();
+void LoadGlassLabPreferences();
+void RefreshGlassLabGeometry();
+void CreateExperienceUI();
+void DestroyExperienceUI();
+void SyncExperienceUI();
+void ToggleExperienceMenu();
+void CloseExperienceMenu();
+void RequestExperienceClose();
+constexpr UINT kExperienceCloseRequest=WM_APP+75;
+void ChooseExperienceColor(bool background);
+void SaveExperienceMaterial();
+constexpr UINT kExperienceChooseColor=WM_APP+76;
+void BeginExperienceResize();
+void FinishExperienceResize(const RECT* original=nullptr);
+void MaybeAbsorbExperienceResize();
+void TickExperienceAbsorb();
+bool ExperienceAbsorbing();
+bool ExperienceInputBlocked();
+float ExperienceAbsorbOpacity();
+void ExperienceSavedGeometry(RECT& rectangle);
+void SyncExperienceCapture();
+bool HandleExperienceKey(const MSG& message);
+bool ExperienceCompact();
+void ExpandExperienceNote();
+void ApplyWindowStacking(bool force=false);
+constexpr int kMinimumNoteWidth=76,kMinimumNoteHeight=24;
+#else
+constexpr wchar_t kWindowClass[] = L"FloatNote.MainWindow";
+constexpr wchar_t kWindowTitle[] = L"FloatNote";
+constexpr wchar_t kMutexName[] = L"Local\\FloatNote.Singleton";
+constexpr int kMinimumNoteWidth=180,kMinimumNoteHeight=90;
+#endif
 
 constexpr UINT kTrayMessage = WM_APP + 1;
 constexpr UINT kShowEditMessage = WM_APP + 2;
@@ -81,7 +125,11 @@ HWND g_window = nullptr;
 HWND g_edit = nullptr;
 HWND g_canvas = nullptr;
 bool g_nativeGlass = false;
+#ifdef FLOATNOTE_GLASS_LAB
+GlassLabBackdrop g_backdrop;
+#else
 NativeBackdrop g_backdrop;
+#endif
 HWND g_pill = nullptr;
 HWND g_grip = nullptr;
 HWND g_menu = nullptr;
@@ -214,8 +262,20 @@ int MenuLogicalWidth() {
 int EffectiveOpacityPercent() {
     return g_settings.opacityPercent;
 }
+#ifdef FLOATNOTE_GLASS_LAB
+int NoteMaximumCornerRadius() {
+    RECT rect{0,0,g_settings.width,g_settings.height};
+    if(g_window)GetClientRect(g_window,&rect);
+    const float scale=(g_window?GetDpiForWindow(g_window):GetDpiForSystem())/96.0f;
+    return GlassGeometry::MaximumRadius(float(rect.right),float(rect.bottom),scale);
+}
+#endif
 int NoteCornerRadius() {
+#ifdef FLOATNOTE_GLASS_LAB
+    return std::clamp(static_cast<int>(std::lround(g_backdrop.cornerRadius)),std::min(8,NoteMaximumCornerRadius()),NoteMaximumCornerRadius());
+#else
     return g_nativeGlass ? 8 : kCornerRadius;
+#endif
 }
 
 int ScaleForDpi(HWND window, int value) {
@@ -254,8 +314,8 @@ void LoadSettings() {
     g_settings.x = ReadIniInt(L"x", CW_USEDEFAULT);
     g_settings.y = ReadIniInt(L"y", CW_USEDEFAULT);
     const bool compactLayout = ReadIniInt(L"layoutVersion", 0) >= 2;
-    g_settings.width = compactLayout ? std::clamp(ReadIniInt(L"width", 320), 180, 16384) : ScaleForDpi(nullptr, 320);
-    g_settings.height = compactLayout ? std::clamp(ReadIniInt(L"height", 160), 90, 16384) : ScaleForDpi(nullptr, 160);
+    g_settings.width = compactLayout ? std::clamp(ReadIniInt(L"width", 320), kMinimumNoteWidth, 16384) : ScaleForDpi(nullptr, 320);
+    g_settings.height = compactLayout ? std::clamp(ReadIniInt(L"height", 160), kMinimumNoteHeight, 16384) : ScaleForDpi(nullptr, 160);
     g_settings.fontSize = std::clamp(ReadIniInt(L"fontSize", 13), 8, 40);
     g_settings.opacityPercent = std::clamp(ReadIniInt(L"opacity", 88), 0, 100);
     g_settings.glass = ReadIniInt(L"visualVersion", 0) >= 3 ? ReadIniBool(L"glass", true) : true;
@@ -273,6 +333,9 @@ void SaveSettings() {
     if (g_window && !IsIconic(g_window) && !g_closing) {
         RECT rectangle{};
         if (GetWindowRect(g_window, &rectangle)) {
+#ifdef FLOATNOTE_GLASS_LAB
+            ExperienceSavedGeometry(rectangle);
+#endif
             g_settings.x = rectangle.left;
             g_settings.y = rectangle.top;
             g_settings.width = rectangle.right - rectangle.left;
@@ -438,6 +501,16 @@ void RecreateFonts(HWND window) {
 }
 
 void RoundWindow(HWND window, int radius) {
+#ifdef FLOATNOTE_GLASS_LAB
+    if (window == g_window) {
+        // Text/tint and shader share the visible silhouette; the custom shader
+        // gets a conservative HWND scissor so binary clipping cannot remove AA.
+        // DWM's fixed small corner must not override the lab radius.
+        const int corners = 1;
+        DwmSetWindowAttribute(window, static_cast<DWMWINDOWATTRIBUTE>(33), &corners, sizeof(corners));
+        radius = NoteCornerRadius();
+    }
+#else
     if (window == g_window) {
         // DWM's forced rounding also requests its shadow. Opt out and retain
         // our own rounded region when the user disables the shadow.
@@ -450,8 +523,15 @@ void RoundWindow(HWND window, int radius) {
     }
     if (window == g_window && g_nativeGlass)
         radius = NoteCornerRadius();
+#endif
     RECT rect{};
     GetWindowRect(window, &rect);
+#ifdef FLOATNOTE_GLASS_LAB
+    if(window==g_window && g_nativeGlass && g_backdrop.mode>0) {
+        HRGN sampling=CreateGlassSamplingClip(rect.right-rect.left,rect.bottom-rect.top,ScaleForDpi(window,radius));
+        if(sampling){if(!SetWindowRgn(window,sampling,TRUE))DeleteObject(sampling);return;}
+    }
+#endif
     HRGN region = CreateRoundRectRgn(0, 0, rect.right - rect.left + 1, rect.bottom - rect.top + 1,
                                      ScaleForDpi(window, radius * 2), ScaleForDpi(window, radius * 2));
     if (!SetWindowRgn(window, region, TRUE))
@@ -466,16 +546,39 @@ void UpdateLayout(HWND window) {
     if (g_canvas)
         SetWindowPos(g_canvas, HWND_BOTTOM, 0, 0, rect.right, rect.bottom, SWP_NOACTIVATE);
     g_backdrop.Resize(rect.right, rect.bottom);
-    const int margin = ScaleForDpi(window, 12);
-    const int top = ScaleForDpi(window, 29);
     SetWindowPos(g_pill, nullptr, (rect.right - ScaleForDpi(window, 46)) / 2, ScaleForDpi(window, 5),
                  ScaleForDpi(window, 46), ScaleForDpi(window, 18), SWP_NOZORDER | SWP_NOACTIVATE);
-    SetWindowPos(g_edit, nullptr, margin, top, std::max(1L, rect.right - 2 * margin),
-                 std::max(1L, rect.bottom - top - ScaleForDpi(window, 12)), SWP_NOZORDER | SWP_NOACTIVATE);
+#ifdef FLOATNOTE_GLASS_LAB
+    const auto layout=GlassEditorLayout::Calculate(rect.right,rect.bottom,float(NoteCornerRadius()),
+        GetDpiForWindow(window)/96.0f);
+    const bool compact=ExperienceCompact() || ExperienceAbsorbing() || rect.bottom<=ScaleForDpi(window,44);
+    ShowWindow(g_pill,SW_HIDE);
+    if(compact && GetFocus()==g_edit)SetFocus(g_window);
+    ShowWindow(g_edit,compact?SW_HIDE:SW_SHOWNOACTIVATE);
+    if(compact)SetWindowPos(g_edit,nullptr,0,0,1,1,SWP_NOZORDER|SWP_NOACTIVATE);
+    else SetWindowPos(g_edit,nullptr,layout.editor.left,layout.editor.top,
+        layout.editor.Width(),layout.editor.Height(),SWP_NOZORDER|SWP_NOACTIVATE);
     SendMessageW(g_edit, EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN, 0);
-    SetWindowPos(g_grip, HWND_TOP, rect.right - ScaleForDpi(window, 22), rect.bottom - ScaleForDpi(window, 22),
-                 ScaleForDpi(window, 18), ScaleForDpi(window, 18), SWP_NOACTIVATE);
+    // EDIT's formatting rectangle is separate from its HWND size. Refresh it
+    // explicitly after resizing; this does not replace text or clear undo.
+    RECT formatting{};GetClientRect(g_edit,&formatting);
+    SendMessageW(g_edit,EM_SETRECTNP,0,reinterpret_cast<LPARAM>(&formatting));
+    SetWindowPos(g_grip,HWND_TOP,layout.grip.left,layout.grip.top,
+        layout.grip.Width(),layout.grip.Height(),SWP_NOACTIVATE);
+    ShowWindow(g_grip,ExperienceCompact() || ExperienceAbsorbing()?SW_HIDE:SW_SHOWNOACTIVATE);
+#else
+    const int margin=ScaleForDpi(window,12),top=ScaleForDpi(window,29);
+    SetWindowPos(g_edit,nullptr,margin,top,std::max(1L,rect.right-2*margin),
+        std::max(1L,rect.bottom-top-margin),SWP_NOZORDER|SWP_NOACTIVATE);
+    SendMessageW(g_edit,EM_SETMARGINS,EC_LEFTMARGIN|EC_RIGHTMARGIN,0);
+    SetWindowPos(g_grip,HWND_TOP,rect.right-ScaleForDpi(window,22),rect.bottom-ScaleForDpi(window,22),
+        ScaleForDpi(window,18),ScaleForDpi(window,18),SWP_NOACTIVATE);
+#endif
     RoundWindow(window, kCornerRadius);
+#ifdef FLOATNOTE_GLASS_LAB
+    RefreshGlassLabGeometry();
+    SyncExperienceUI();
+#endif
     InvalidateRect(window, nullptr, TRUE);
     RequestRender();
 }
@@ -508,7 +611,11 @@ void ApplyVisuals(HWND window) {
     g_glassStatus = Text().glassOff;
     const int none = 1;
     DwmSetWindowAttribute(window, static_cast<DWMWINDOWATTRIBUTE>(38), &none, sizeof(none));
+#ifdef FLOATNOTE_GLASS_LAB
+    if (g_backdrop.mode>=0 && !ExperienceCompact()) {
+#else
     if (g_settings.glass) {
+#endif
         if (g_highContrast)
             g_glassStatus = Text().glassHighContrast;
         else if (GetSystemMetrics(SM_REMOTESESSION))
@@ -568,6 +675,10 @@ void ApplyVisuals(HWND window) {
     RoundWindow(window, kCornerRadius);
     RedrawWindow(window, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
     RequestRender();
+#ifdef FLOATNOTE_GLASS_LAB
+    ApplyWindowStacking();
+    SyncExperienceUI();
+#endif
     if (g_menu && IsWindowVisible(g_menu)) {
         SetLayeredWindowAttributes(g_menu, 0, 255, LWA_ALPHA);
         SetWindowPos(g_menu, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
@@ -623,15 +734,30 @@ void ApplyInteractionMode(bool = false) {
     if (g_nativeGlass && g_settings.passThrough)
         SetLayeredWindowAttributes(g_window, 0, 254, LWA_ALPHA);
     if (g_isVisible) {
+#ifdef FLOATNOTE_GLASS_LAB
+        if(!ExperienceCompact())ShowWindow(g_window,SW_SHOWNOACTIVATE);
+#else
         SetWindowPos(g_window, (g_settings.topmost || g_settings.passThrough) ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0,
                      0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+#endif
     }
     UpdateLayout(g_window);
     ApplyVisuals(g_window);
+#ifdef FLOATNOTE_GLASS_LAB
+    ApplyWindowStacking(true);
+    SyncExperienceUI();
+#endif
     UpdateTrayTip();
 }
 
 void EnterEditor() {
+#ifdef FLOATNOTE_GLASS_LAB
+    if(ExperienceInputBlocked())return;
+    if(ExperienceCompact()) {
+        if(g_settings.passThrough)SetPassThrough(false);
+        ExpandExperienceNote();return;
+    }
+#endif
     if (g_settings.passThrough) {
         g_settings.passThrough = false;
         SaveSettings();
@@ -646,7 +772,9 @@ void EnterEditor() {
 }
 
 void SetPassThrough(bool enabled) {
+#ifndef FLOATNOTE_GLASS_LAB
     CloseMenu();
+#endif
     SavePendingNote();
     if (enabled && (g_saveFailed || g_loadFailed)) {
         EnterEditor();
@@ -693,6 +821,10 @@ bool IsAutostartEnabled() {
 }
 
 bool SetAutostartEnabled(bool enabled) {
+#if defined(FLOATNOTE_GLASS_LAB) && !defined(FLOATNOTE_LOCAL_DESKTOP)
+    (void)enabled;
+    return false;
+#else
     const auto shortcut = StartupShortcutPath();
     if (shortcut.empty()) {
         return false;
@@ -720,6 +852,7 @@ bool SetAutostartEnabled(bool enabled) {
     }
     shellLink->Release();
     return SUCCEEDED(result);
+#endif
 }
 
 HICON CreateNoteIcon(int size) {
@@ -795,8 +928,15 @@ void UpdateTrayTip() {
 }
 
 void ToggleVisibility() {
+#ifdef FLOATNOTE_GLASS_LAB
+    if(ExperienceInputBlocked())return;
+#endif
     CloseMenu();
-    if (g_isVisible && IsWindowVisible(g_window)) {
+    if (g_isVisible && (IsWindowVisible(g_window)
+#ifdef FLOATNOTE_GLASS_LAB
+        || ExperienceCompact()
+#endif
+    )) {
         SavePendingNote();
         if (g_saveFailed) {
             EnterEditor();
@@ -808,11 +948,23 @@ void ToggleVisibility() {
     } else {
         EnterEditor();
     }
+#ifdef FLOATNOTE_GLASS_LAB
+    SyncExperienceUI();
+#endif
 }
 
 void ShowTrayMenu(POINT position) {
     HMENU menu = CreatePopupMenu();
-    const auto shortcut = [](const wchar_t* label, const wchar_t* keys) { return std::wstring(label) + L"\t" + keys; };
+    const auto shortcut = [](const wchar_t* label, const wchar_t* keys) {
+#ifdef FLOATNOTE_GLASS_LAB
+        (void)keys;return std::wstring(label);
+#else
+        return std::wstring(label) + L"\t" + keys;
+#endif
+    };
+#ifdef FLOATNOTE_GLASS_LAB
+    AppendMenuW(menu,MF_STRING,kControlPill,L"便签控制…");
+#endif
     const auto editLabel = shortcut(Text().editNow, L"Ctrl+Alt+E");
     const auto passLabel = shortcut(Text().passThrough, L"Ctrl+Alt+P");
     const auto visibilityLabel = shortcut(g_isVisible ? Text().hideWindow : Text().showWindow, L"Ctrl+Alt+H");
@@ -832,7 +984,11 @@ void ShowTrayMenu(POINT position) {
         }
         AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(opacityMenu), Text().backgroundOpacity);
     }
+#ifdef FLOATNOTE_GLASS_LAB
+    AppendMenuW(menu,MF_STRING,kMenuGlass,L"材质实验…");
+#else
     AppendMenuW(menu, MF_STRING | (g_settings.glass ? MF_CHECKED : 0), kMenuGlass, Text().glass);
+#endif
     AppendMenuW(menu, MF_STRING, kMenuTheme, Text().customTheme);
     AppendMenuW(menu, MF_STRING, kMenuTextColor, Text().textColor);
     AppendMenuW(menu, MF_STRING | (g_settings.autoTextColor ? MF_CHECKED : 0), kMenuAutoTextColor, Text().autoTextColor);
@@ -845,7 +1001,9 @@ void ShowTrayMenu(POINT position) {
     AppendMenuW(languageMenu, MF_STRING | (g_settings.language == UiLanguage::English ? MF_CHECKED : 0),
                 kMenuLanguageEnglish, Text().languageEnglish);
     AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(languageMenu), Text().language);
+#if !defined(FLOATNOTE_GLASS_LAB) || defined(FLOATNOTE_LOCAL_DESKTOP)
     AppendMenuW(menu, MF_STRING | (IsAutostartEnabled() ? MF_CHECKED : 0), kMenuAutostart, Text().autostart);
+#endif
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, kMenuExit, Text().exit);
 
@@ -859,6 +1017,9 @@ void ShowTrayMenu(POINT position) {
 }
 
 void HandleMenuCommand(int command) {
+#if defined(FLOATNOTE_GLASS_LAB) && !defined(FLOATNOTE_LOCAL_DESKTOP)
+    if(command == kMenuAutostart) return;
+#endif
     if (command >= kMenuOpacityBase && command <= kMenuOpacityBase + 100) {
         SetOpacityPercent(command - kMenuOpacityBase);
         return;
@@ -874,10 +1035,14 @@ void HandleMenuCommand(int command) {
         ToggleVisibility();
         break;
     case kMenuGlass:
+#ifdef FLOATNOTE_GLASS_LAB
+        OpenGlassLabControls();
+#else
         g_settings.glass = !g_settings.glass;
         ApplyVisuals(g_window);
         SaveSettings();
         UpdateMenuLabels();
+#endif
         break;
     case kMenuPassThrough:
         SetPassThrough(!g_settings.passThrough);
@@ -1134,6 +1299,9 @@ LRESULT CALLBACK SliderProcedure(HWND window, UINT message, WPARAM wp, LPARAM lp
 }
 
 void UpdateMenuLabels() {
+#ifdef FLOATNOTE_GLASS_LAB
+    SyncExperienceUI();
+#endif
     if (!g_menu)
         return;
     LayoutMenuForMode();
@@ -1142,9 +1310,13 @@ void UpdateMenuLabels() {
     };
     const auto topmost = stateLabel(Text().alwaysOnTop, g_settings.topmost ? Text().stateOn : Text().stateOff);
     const auto autostart = stateLabel(Text().autostart, IsAutostartEnabled() ? Text().stateOn : Text().stateOff);
+#ifdef FLOATNOTE_GLASS_LAB
+    const std::wstring glass=L"材质实验…";
+#else
     const auto glass = stateLabel(Text().glass, g_glassActive      ? Text().stateOn
                                                 : g_settings.glass ? Text().stateSelected
                                                                    : Text().stateOff);
+#endif
     const auto passThrough = stateLabel(Text().passThrough, g_settings.passThrough ? Text().stateOn
                                                             : g_passHotkey         ? L"Ctrl+Alt+P"
                                                                                    : Text().menuToggle);
@@ -1200,6 +1372,9 @@ void RefreshLocalizedUi() {
 }
 
 void CloseMenu() {
+#ifdef FLOATNOTE_GLASS_LAB
+    CloseExperienceMenu();
+#endif
     if (g_menu && IsWindowVisible(g_menu)) {
         g_menuDismissedAt = GetTickCount64();
         ShowWindow(g_menu, SW_HIDE);
@@ -1440,6 +1615,9 @@ LRESULT CALLBACK MenuProcedure(HWND window, UINT message, WPARAM wp, LPARAM lp) 
 }
 
 void TogglePillMenu() {
+#ifdef FLOATNOTE_GLASS_LAB
+    ToggleExperienceMenu();return;
+#endif
     if (g_menu && IsWindowVisible(g_menu)) {
         CloseMenu();
         return;
@@ -1486,6 +1664,9 @@ void TogglePillMenu() {
         g_menuShadow = button(kMenuShadow, Text().shadow, 16, 388, 248);
         g_menuLanguage = button(kMenuLanguage, Text().language, 16, 424, 248);
         g_menuAutostart = button(kMenuAutostart, Text().autostart, 16, 460, 248);
+#if defined(FLOATNOTE_GLASS_LAB) && !defined(FLOATNOTE_LOCAL_DESKTOP)
+        EnableWindow(g_menuAutostart,FALSE);
+#endif
         g_menuHide = button(kMenuToggleVisible, Text().hideWindow, 16, 496, 120);
         g_menuExit = button(kMenuExit, Text().exit, 144, 496, 120);
         RoundWindow(g_menu, kCornerRadius);
@@ -1519,18 +1700,25 @@ void TogglePillMenu() {
 }
 
 void ResizeWindowFromPointerDelta(int dx, int dy) {
+#ifdef FLOATNOTE_GLASS_LAB
+    if(ExperienceInputBlocked())return;
+    BeginExperienceResize();
+#endif
     MONITORINFO monitor{sizeof(monitor)};
     const int currentWidth = static_cast<int>(g_pointerWindow.right - g_pointerWindow.left);
     const int currentHeight = static_cast<int>(g_pointerWindow.bottom - g_pointerWindow.top);
-    int maxWidth = std::max(ScaleForDpi(g_window, 180), currentWidth + std::max(0, dx));
-    int maxHeight = std::max(ScaleForDpi(g_window, 90), currentHeight + std::max(0, dy));
+    int maxWidth = std::max(ScaleForDpi(g_window, kMinimumNoteWidth), currentWidth + std::max(0, dx));
+    int maxHeight = std::max(ScaleForDpi(g_window, kMinimumNoteHeight), currentHeight + std::max(0, dy));
     if (GetMonitorInfoW(MonitorFromWindow(g_window, MONITOR_DEFAULTTONEAREST), &monitor)) {
-        maxWidth = std::max(ScaleForDpi(g_window, 180), static_cast<int>(monitor.rcWork.right - monitor.rcWork.left));
-        maxHeight = std::max(ScaleForDpi(g_window, 90), static_cast<int>(monitor.rcWork.bottom - monitor.rcWork.top));
+        maxWidth = std::max(ScaleForDpi(g_window, kMinimumNoteWidth), static_cast<int>(monitor.rcWork.right - monitor.rcWork.left));
+        maxHeight = std::max(ScaleForDpi(g_window, kMinimumNoteHeight), static_cast<int>(monitor.rcWork.bottom - monitor.rcWork.top));
     }
-    SetWindowPos(g_window, nullptr, 0, 0, std::clamp(currentWidth + dx, ScaleForDpi(g_window, 180), maxWidth),
-                 std::clamp(currentHeight + dy, ScaleForDpi(g_window, 90), maxHeight),
+    SetWindowPos(g_window, nullptr, 0, 0, std::clamp(currentWidth + dx, ScaleForDpi(g_window, kMinimumNoteWidth), maxWidth),
+                 std::clamp(currentHeight + dy, ScaleForDpi(g_window, kMinimumNoteHeight), maxHeight),
                  SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+#ifdef FLOATNOTE_GLASS_LAB
+    MaybeAbsorbExperienceResize();
+#endif
 }
 
 void MoveWindowFromPointerDelta(int dx, int dy) {
@@ -1539,6 +1727,10 @@ void MoveWindowFromPointerDelta(int dx, int dy) {
 }
 
 LRESULT CALLBACK PointerProcedure(HWND window, UINT message, WPARAM wp, LPARAM lp, UINT_PTR id, DWORD_PTR) {
+#ifdef FLOATNOTE_GLASS_LAB
+    if(ExperienceInputBlocked() && (message==WM_LBUTTONDOWN || message==WM_LBUTTONDBLCLK ||
+        message==WM_LBUTTONUP || message==WM_MOUSEMOVE))return 0;
+#endif
     if (message == BM_CLICK && id == kControlPill) {
         PostMessageW(g_window, WM_COMMAND, kControlPill, 0);
         return 0;
@@ -1555,7 +1747,8 @@ LRESULT CALLBACK PointerProcedure(HWND window, UINT message, WPARAM wp, LPARAM l
         } else
             point = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
         HWND target = nullptr;
-        for (HWND child : {g_grip, g_pill, g_edit}) {
+          for (HWND child : {g_grip, g_pill, g_edit}) {
+            if(!(GetWindowLongPtrW(child,GWL_STYLE)&WS_VISIBLE))continue;
             RECT bounds{};
             GetWindowRect(child, &bounds);
             MapWindowPoints(nullptr, window, reinterpret_cast<POINT*>(&bounds), 2);
@@ -1581,6 +1774,9 @@ LRESULT CALLBACK PointerProcedure(HWND window, UINT message, WPARAM wp, LPARAM l
         return TRUE;
     }
     if (message == WM_LBUTTONDOWN) {
+#ifdef FLOATNOTE_GLASS_LAB
+        if(id==kControlGrip)BeginExperienceResize();
+#endif
         if (id == 0)
             SetFocus(g_window);
         g_pointerDown = true;
@@ -1625,6 +1821,9 @@ LRESULT CALLBACK PointerProcedure(HWND window, UINT message, WPARAM wp, LPARAM l
         ReleaseCapture();
         if (dragged) {
             RecoverWindowPosition();
+#ifdef FLOATNOTE_GLASS_LAB
+            FinishExperienceResize();
+#endif
             SaveSettings();
         } else if (id == kControlPill)
             PostMessageW(g_window, WM_COMMAND, kControlPill, 0);
@@ -1637,8 +1836,12 @@ LRESULT CALLBACK PointerProcedure(HWND window, UINT message, WPARAM wp, LPARAM l
         return 0;
     }
     if (message == WM_CAPTURECHANGED) {
-        if (g_pointerDown && g_pointerDragged)
+        if (g_pointerDown && g_pointerDragged) {
+#ifdef FLOATNOTE_GLASS_LAB
+            FinishExperienceResize();
+#endif
             SetTimer(g_window, 2, 300, nullptr);
+        }
         g_pointerDown = false;
     }
     const LRESULT result = DefSubclassProc(window, message, wp, lp);
@@ -1968,6 +2171,12 @@ void DrawCompositedDecorations(RECT outer) {
     const int radius = ScaleForDpi(g_window, NoteCornerRadius());
     const float stroke = std::max(1.0f, ScaleForDpi(g_window, 1) * 0.75f);
     auto edge = [&](int x, int y) {
+#ifdef FLOATNOTE_GLASS_LAB
+        // The liquid shader owns the reflective rim; a dark UI outline on
+        // top would cancel its highlight. Retain outlines for other modes.
+        if (g_nativeGlass && g_backdrop.mode == 2 && !g_highContrast)
+            return;
+#endif
         const float distance = RoundedDistance(x + 0.5f, y + 0.5f, card, static_cast<float>(radius));
         CompositePixel(x, y, kText, stroke * 0.5f + 0.5f - std::abs(distance + stroke * 0.5f),
                        g_highContrast ? 255 : 38);
@@ -1989,6 +2198,7 @@ void DrawCompositedDecorations(RECT outer) {
     RECT pill{};
     GetWindowRect(g_pill, &pill);
     OffsetRect(&pill, -outer.left, -outer.top);
+#ifndef FLOATNOTE_GLASS_LAB
     InflateRect(&pill, 0, -ScaleForDpi(g_window, 3));
     CompositeRoundRect(pill, (pill.bottom - pill.top) * 0.5f,
                        g_highContrast ? kText : BlendColor(kBackground, kText, g_pillHover ? 82 : 92));
@@ -2006,6 +2216,11 @@ void DrawCompositedDecorations(RECT outer) {
                 CompositePixel(x, y, dots, dotRadius + 0.5f - std::sqrt(dx * dx + dy * dy));
             }
     }
+#endif
+    // The body becomes an unadorned glass drop during absorption.
+#ifdef FLOATNOTE_GLASS_LAB
+    if(ExperienceAbsorbing())return;
+#endif
     RECT grip{};
     GetWindowRect(g_grip, &grip);
     OffsetRect(&grip, -outer.left, -outer.top);
@@ -2016,7 +2231,7 @@ void DrawCompositedDecorations(RECT outer) {
                       static_cast<float>(grip.bottom - ScaleForDpi(g_window, offset + 3)),
                       static_cast<float>(ScaleForDpi(g_window, 1)), kText, g_highContrast ? 255 : 110);
     }
-    if (GetFocus() == g_pill) {
+    if (IsWindowVisible(g_pill) && GetFocus() == g_pill) {
         RECT focus = pill;
         InflateRect(&focus, ScaleForDpi(g_window, 2), ScaleForDpi(g_window, 2));
         const float focusRadius = (focus.bottom - focus.top) * 0.5f;
@@ -2041,6 +2256,9 @@ void ResetCaret() {
 
 void RenderLayeredWindow() {
     g_renderPosted = false;
+#ifdef FLOATNOTE_GLASS_LAB
+    if(ExperienceCompact())return;
+#endif
     if (g_rendering || g_closing || !IsWindow(g_window) || !g_isVisible || IsIconic(g_window))
         return;
     RECT outer{};
@@ -2052,6 +2270,9 @@ void RenderLayeredWindow() {
     SurfaceBuffer& surface = g_surface;
     if (!surface.Resize(width, height))
         return;
+    // Child visibility controls composition; a hidden parent must not erase
+    // text from an off-screen render prepared before the window is shown.
+    const bool editorVisible=(GetWindowLongPtrW(g_edit,GWL_STYLE)&WS_VISIBLE)!=0;
     RECT editorClient{};
     GetClientRect(g_edit, &editorClient);
     if (!g_textOnBlack.Resize(editorClient.right, editorClient.bottom) ||
@@ -2066,6 +2287,7 @@ void RenderLayeredWindow() {
     RECT sourceBounds{0, 0, width, height};
     FillRect(surface.dc, &sourceBounds, g_editBrush);
     for (HWND child : {g_edit, g_pill, g_grip}) {
+        if(!(GetWindowLongPtrW(child,GWL_STYLE)&WS_VISIBLE))continue;
         RECT childRect{};
         GetWindowRect(child, &childRect);
         OffsetRect(&childRect, -outer.left, -outer.top);
@@ -2082,6 +2304,7 @@ void RenderLayeredWindow() {
     // theme or chosen ink. A white-background pass identifies opaque native
     // selection/IME pixels (unchanged between passes), which retain their colors.
     for (int pass : {1, 2}) {
+        if(!editorVisible)break;
         auto& mask = pass == 1 ? g_textOnBlack : g_textOnWhite;
         g_textMask = pass;
         FillRect(mask.dc, &editorClient, static_cast<HBRUSH>(GetStockObject(pass == 1 ? BLACK_BRUSH : WHITE_BRUSH)));
@@ -2100,7 +2323,7 @@ void RenderLayeredWindow() {
             const DWORD rgb = pixel & 0xffffff;
             const COLORREF color = RGB((rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255);
             pixel = PremultiplyPixel(color, rgb == background ? opacity : 255);
-            if (x >= editor.left && x < editor.right && y >= editor.top && y < editor.bottom) {
+            if (editorVisible && x >= editor.left && x < editor.right && y >= editor.top && y < editor.bottom) {
                 const int index = (y - editor.top) * g_textOnBlack.width + x - editor.left;
                 const DWORD black = g_textOnBlack.pixels[index] & 0xffffff;
                 const DWORD white = g_textOnWhite.pixels[index] & 0xffffff;
@@ -2128,7 +2351,7 @@ void RenderLayeredWindow() {
         }
     }
     DrawCompositedDecorations(outer);
-    if (g_caretVisible && GetFocus() == g_edit && !g_settings.passThrough && !g_loadFailed) {
+    if (editorVisible && g_caretVisible && GetFocus() == g_edit && !g_settings.passThrough && !g_loadFailed) {
         DWORD start = 0, end = 0;
         SendMessageW(g_edit, EM_GETSEL, reinterpret_cast<WPARAM>(&start), reinterpret_cast<LPARAM>(&end));
         GUITHREADINFO info{sizeof(info)};
@@ -2145,6 +2368,9 @@ void RenderLayeredWindow() {
     POINT position{outer.left, outer.top}, source{};
     SIZE size{width, height};
     BLENDFUNCTION blend{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+#ifdef FLOATNOTE_GLASS_LAB
+    blend.SourceConstantAlpha=static_cast<BYTE>(255*ExperienceAbsorbOpacity());
+#endif
     HWND target = g_nativeGlass ? g_canvas : g_window;
     if (!UpdateLayeredWindow(target, nullptr, g_nativeGlass ? nullptr : &position, &size, surface.dc, &source, 0,
                              &blend, ULW_ALPHA)) {
@@ -2160,6 +2386,24 @@ void RenderLayeredWindow() {
 }
 
 LRESULT CALLBACK WindowProcedure(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
+#ifdef FLOATNOTE_GLASS_LAB
+    if (message == WM_TIMER && wParam == 71) { g_backdrop.Tick(); return 0; }
+    if (message == kGlassFrameReady) { g_backdrop.FrameReady(); ApplyWindowStacking(); return 0; }
+    if (message == WM_WINDOWPOSCHANGED) {g_backdrop.RequestDraw();SyncExperienceUI();}
+    if (message == WM_ACTIVATE && LOWORD(wParam)!=WA_INACTIVE)SyncExperienceUI();
+    if (message == WM_TIMER && wParam==73){ApplyWindowStacking();SyncExperienceUI();return 0;}
+    if (message == WM_TIMER && wParam==74){KillTimer(window,74);SaveExperienceMaterial();return 0;}
+    if (message == WM_TIMER && wParam==75){TickExperienceAbsorb();return 0;}
+    if (message == WM_TIMER && wParam==76){SyncExperienceCapture();return 0;}
+    if (message == kExperienceCloseRequest){RequestExperienceClose();return 0;}
+    if (message == kExperienceChooseColor){ChooseExperienceColor(wParam!=0);return 0;}
+    if (message == WM_SIZING)BeginExperienceResize();
+    if (message == WM_LBUTTONDBLCLK && ExperienceCompact()){ExpandExperienceNote();return 0;}
+    // The laboratory cannot create, remove, or repoint the production startup shortcut.
+#ifndef FLOATNOTE_LOCAL_DESKTOP
+    if (message == WM_COMMAND && LOWORD(wParam) == kMenuAutostart) return 0;
+#endif
+#endif
     if (g_taskbarCreatedMessage && message == g_taskbarCreatedMessage) {
         AddTrayIcon();
         UpdateTrayTip();
@@ -2171,10 +2415,12 @@ LRESULT CALLBACK WindowProcedure(HWND window, UINT message, WPARAM wParam, LPARA
         CreateControls(window);
         LoadNote();
         AddTrayIcon();
+#if !defined(FLOATNOTE_GLASS_LAB) || defined(FLOATNOTE_LOCAL_DESKTOP)
         g_modeHotkey = RegisterHotKey(window, kHotkeyToggleMode, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, 'E') != FALSE;
         g_hideHotkey =
             RegisterHotKey(window, kHotkeyToggleVisibility, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, 'H') != FALSE;
         g_passHotkey = RegisterHotKey(window, kHotkeyPassThrough, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, 'P') != FALSE;
+#endif
         return 0;
     case kRenderMessage:
         RenderLayeredWindow();
@@ -2234,7 +2480,12 @@ LRESULT CALLBACK WindowProcedure(HWND window, UINT message, WPARAM wParam, LPARA
         return HitTestWindow(window, lParam);
     case WM_GETMINMAXINFO: {
         auto info = reinterpret_cast<MINMAXINFO*>(lParam);
-        info->ptMinTrackSize = {ScaleForDpi(window, 180), ScaleForDpi(window, 90)};
+#ifdef FLOATNOTE_GLASS_LAB
+        // DWM glass uses WS_THICKFRAME; DefWindowProc also enforces this minimum
+        // on SetWindowPos. Presentation motion must be allowed to reach the dot.
+        if(ExperienceAbsorbing()){info->ptMinTrackSize={1,1};return 0;}
+#endif
+        info->ptMinTrackSize = {ScaleForDpi(window, kMinimumNoteWidth), ScaleForDpi(window, kMinimumNoteHeight)};
         return 0;
     }
     case WM_SIZE:
@@ -2261,6 +2512,9 @@ LRESULT CALLBACK WindowProcedure(HWND window, UINT message, WPARAM wParam, LPARA
         return 0;
     }
     case WM_EXITSIZEMOVE:
+#ifdef FLOATNOTE_GLASS_LAB
+        FinishExperienceResize();
+#endif
         SaveSettings();
         return 0;
     case WM_COMMAND: {
@@ -2369,6 +2623,9 @@ LRESULT CALLBACK WindowProcedure(HWND window, UINT message, WPARAM wParam, LPARA
         return 0;
     case WM_DESTROY:
         g_closing = true;
+#ifdef FLOATNOTE_GLASS_LAB
+        DestroyExperienceUI();
+#endif
         g_backdrop.Close();
         if (g_menu)
             DestroyWindow(g_menu);
@@ -2402,6 +2659,9 @@ LRESULT CALLBACK WindowProcedure(HWND window, UINT message, WPARAM wParam, LPARA
     return DefWindowProcW(window, message, wParam, lParam);
 }
 bool HandleAppKey(const MSG& message) {
+#ifdef FLOATNOTE_GLASS_LAB
+    if(HandleExperienceKey(message))return true;
+#endif
     if (message.message != WM_KEYDOWN)
         return false;
     const bool menuFocus =
@@ -2413,6 +2673,9 @@ bool HandleAppKey(const MSG& message) {
         return true;
     }
     if (GetKeyState(VK_CONTROL) < 0 && !menuFocus) {
+#ifdef FLOATNOTE_GLASS_LAB
+        if(message.wParam==VK_OEM_COMMA){ToggleExperienceMenu();return true;}
+#endif
         if (message.wParam == 'S') {
             SavePendingNote();
             SaveSettings();
@@ -2465,6 +2728,14 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     g_notePath = g_dataDirectory / L"note.txt";
     g_settingsPath = g_dataDirectory / L"settings.ini";
     LoadSettings();
+#ifdef FLOATNOTE_GLASS_LAB
+    LoadGlassLabPreferences();
+    if(!std::filesystem::exists(g_settingsPath)) {
+        g_settings.opacityPercent=8;
+        g_settings.width=ScaleForDpi(nullptr,400); g_settings.height=ScaleForDpi(nullptr,260);
+        g_settings.fontSize=12; g_settings.glass=true; g_settings.topmost=true;
+    }
+#endif
     PlaceInitialWindow();
 
     WNDCLASSEXW windowClass{};
@@ -2485,6 +2756,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 
     g_taskbarCreatedMessage = RegisterWindowMessageW(L"TaskbarCreated");
     DWORD startupExtendedStyle = WS_EX_TOOLWINDOW | WS_EX_LAYERED;
+#ifdef FLOATNOTE_GLASS_LAB
+    if(g_settings.topmost)startupExtendedStyle|=WS_EX_TOPMOST;
+#endif
     HWND window =
         CreateWindowExW(startupExtendedStyle, kWindowClass, kWindowTitle, WS_POPUP | WS_CLIPCHILDREN, g_settings.x,
                         g_settings.y, g_settings.width, g_settings.height, nullptr, nullptr, instance, nullptr);
@@ -2493,9 +2767,22 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
         return 2;
     }
 
+    // Saved dimensions are physical pixels. Enforce the minimum after resolving
+    // this window's actual monitor DPI, not using the primary monitor at load.
+#ifdef FLOATNOTE_GLASS_LAB
+    RECT restored{};GetWindowRect(window,&restored);
+    const int minimumWidth=ScaleForDpi(window,kMinimumNoteWidth),minimumHeight=ScaleForDpi(window,kMinimumNoteHeight);
+    if(restored.right-restored.left<minimumWidth || restored.bottom-restored.top<minimumHeight)
+        SetWindowPos(window,nullptr,0,0,std::max(minimumWidth,int(restored.right-restored.left)),
+            std::max(minimumHeight,int(restored.bottom-restored.top)),SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
+#endif
     ApplyInteractionMode(true);
     ShowWindow(window, SW_SHOWNOACTIVATE);
     UpdateWindow(window);
+#ifdef FLOATNOTE_GLASS_LAB
+    CreateExperienceUI();
+    ApplyWindowStacking(true);
+#endif
     // Shortcut conflicts never block startup behind a modal dialog. The tray
     // and a second launch remain available, and settings show the exact status.
 

@@ -14,12 +14,12 @@ $ErrorActionPreference = 'Stop'
 
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $outputPath = Join-Path $projectRoot $OutputDirectory
-$sourcePath = Join-Path $projectRoot 'src\main.cpp'
+$sourcePath = Join-Path $projectRoot 'experiments\local_desktop.cpp'
 if ($Test) { $sourcePath = Join-Path $projectRoot 'tests\regression.cpp' }
 if ($SourceFile) { $sourcePath = Join-Path $projectRoot $SourceFile }
 
 $sourcePath = [IO.Path]::GetFullPath($sourcePath)
-if (-not $sourcePath.StartsWith([IO.Path]::GetFullPath($projectRoot), [StringComparison]::OrdinalIgnoreCase)) {
+if (-not $sourcePath.StartsWith([IO.Path]::GetFullPath($projectRoot) + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
     throw 'SourceFile must stay inside the FloatNote project.'
 }
 if (-not (Test-Path -LiteralPath $sourcePath)) { throw "Source file not found: $sourcePath" }
@@ -63,6 +63,10 @@ $compileCommand = @(
 if ($LASTEXITCODE -ne 0) { throw "FloatNote build failed with compiler exit code $LASTEXITCODE." }
 
 $artifact = Get-Item -LiteralPath $artifactPath
+$noticesPath = Join-Path $projectRoot 'THIRD_PARTY_NOTICES.md'
+if (Test-Path -LiteralPath $noticesPath) {
+    Copy-Item -LiteralPath $noticesPath -Destination (Join-Path $outputPath 'THIRD_PARTY_NOTICES.md') -Force
+}
 Write-Host ("Built {0} {1}: {2} ({3:N0} bytes)" -f $Configuration, $Architecture, $artifact.FullName, $artifact.Length)
 
 if ($Test -and -not $NoRun) {
